@@ -23,7 +23,7 @@ library
       Reflex.Native.Test.ViewBuilder
   hs-source-dirs: src
   ghc-options:
-      -Wall -fwarn-tabs -funbox-strict-fields -O2 -fspecialise-aggressively -ddump-simpl -ddump-to-file -dsuppress-coercions -dsuppress-idinfo
+      -Wall -fwarn-tabs -funbox-strict-fields -O2 -fspecialise-aggressively
   ghc-prof-options: -fprof-auto
   build-depends:
       base
