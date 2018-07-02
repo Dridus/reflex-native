@@ -23,7 +23,7 @@ library
       Reflex.UIKit.ViewBuilder
   hs-source-dirs: src
   ghc-options:
-      -Wall -fwarn-tabs -funbox-strict-fields -O2 -fspecialise-aggressively -ddump-simpl -ddump-to-file -dsuppress-coercions -dsuppress-idinfo
+      -Wall -fwarn-tabs -funbox-strict-fields -O2 -fspecialise-aggressively
       -optc-Wno-expansion-to-defined -optc-Wno-nullability-inferred-on-nested-type -optc-Wno-nullability-completeness-on-arrays
       -optc-Wno-nullability-completeness -optc-Wno-unknown-attributes
   ghc-prof-options: -fprof-auto
