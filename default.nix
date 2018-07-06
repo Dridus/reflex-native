@@ -1,24 +1,15 @@
 rec {
-  # Functions which extend a haskellPackages with the packages local to this repository and appropriate for the given platform using
-  # haskellPackages.callPackage. Used later to make augmented platform-specific package sets, but also useful for integrating Reflex Native into your Nix
-  # build environment.
-  packages = {
-    common = haskellPackages: {
-      reflex-native = haskellPackages.callCabal2nix "reflex-native" ./reflex-native {};
-      reflex-native-draggy = haskellPackages.callPackage ./examples/draggy {};
-      reflex-native-test = haskellPackages.callCabal2nix "reflex-native-test" ./reflex-native-test {};
-    };
-
-    host = packages.common;
-
-    android = haskellPackages: packages.common haskellPackages // {
-    };
-
-    ios = haskellPackages: packages.common haskellPackages // {
-      hs-uikit = haskellPackages.callPackage ./hs-uikit {};
-      reflex-native-uikit = haskellPackages.callCabal2nix "reflex-native-uikit" ./reflex-native-uikit {};
-    };
+  # Functions which extend a haskellPackages with the packages local to this repository using haskellPackages.callPackage. Used later to make augmented
+  # platform-specific package sets, but also useful for integrating Reflex Native into your Nix build environment.
+  packages = haskellPackages: {
+    hs-kiwi = haskellPackages.callPackage ./hs-kiwi {};
+    hs-uikit = haskellPackages.callPackage ./hs-uikit {};
+    reflex-native = haskellPackages.callCabal2nix "reflex-native" ./reflex-native {};
+    reflex-native-draggy = haskellPackages.callPackage ./examples/draggy {};
+    reflex-native-test = haskellPackages.callCabal2nix "reflex-native-test" ./reflex-native-test {};
+    reflex-native-uikit = haskellPackages.callCabal2nix "reflex-native-uikit" ./reflex-native-uikit {};
   };
+
 
   # Version of reflex-platform we use for iteration on Reflex Native and compiling the examples
   reflex-platform-src = (import <nixpkgs> {}).fetchFromGitHub (builtins.fromJSON (builtins.readFile ./reflex-platform-version.json));
@@ -51,11 +42,11 @@ rec {
       # }) { useTemplateHaskell = false; }) "fast-weak";
     };
 
-    host = nixpkgs.lib.composeExtensions overrides.common (self: super: packages.common self);
+    host = nixpkgs.lib.composeExtensions overrides.common (self: super: packages self);
 
-    android = nixpkgs.lib.composeExtensions overrides.common (self: super: packages.android self);
+    android = nixpkgs.lib.composeExtensions overrides.common (self: super: packages self);
 
-    ios = nixpkgs.lib.composeExtensions overrides.common (self: super: packages.ios self);
+    ios = nixpkgs.lib.composeExtensions overrides.common (self: super: packages self);
   };
 
   # haskellPackages for the host extended with our local overrides.
@@ -68,24 +59,26 @@ rec {
   ghcIosAarch64 = reflex-platform.ghcIosAarch64.override { overrides = overrides.ios; };
 
   # Shell environments for the various platforms
-  shells = {
+  shells = let
+    common = ["hs-kiwi" "hs-uikit" "reflex-native" "reflex-native-draggy" "reflex-native-uikit"];
+  in nixpkgs.lib.mapAttrs (k: drv: drv.overrideAttrs (_: { shellHook = "runHook preConfigureHooks; runHook setupHook"; })) {
     # Shell environment for working on the cross-platform bits only, notably the test framework.
-    host = (reflex-platform.workOnMulti' {
+    host = reflex-platform.workOnMulti' {
       env = ghcHost;
-      packageNames = ["reflex-native" "reflex-native-draggy" "reflex-native-test"];
-    });
+      packageNames = common ++ ["reflex-native-test"];
+    };
 
     # Shell environment for working on the Android side with Android related packages and common packages.
     android = (reflex-platform.workOnMulti' {
       env = ghcAndroidAarch64;
-      packageNames = ["reflex-native" "reflex-native-draggy"];
+      packageNames = common ++ [];
     });
 
     # Shell environment for working on the iOS side with the UIKit related packages, common packages, and any special environmental magics to get iOS cross
     # building working in a shell
     ios = (reflex-platform.workOnMulti' {
       env = ghcIosAarch64;
-      packageNames = ["hs-uikit" "reflex-native" "reflex-native-draggy" "reflex-native-uikit"];
+      packageNames = common ++ [];
 
       # special magics to get the preConfigureHook which adds the framework search paths for iOS frameworks
       # ideally this would not be necessary, and it isn't if haskellPackages generic-builder is doing the work, but since we're running cabal manually it's

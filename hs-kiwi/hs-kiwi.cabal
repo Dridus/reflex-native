@@ -1,0 +1,52 @@
+name:           hs-kiwi
+version:        0.1.0.0
+synopsis:       Bindings to the Kiwi layout constraint solver
+description:    Provides bindings to Kiwi, which implements the Cassowary layout constraint algorithm and can be used to declaratively lay out UI components.
+author:         Confer Health
+maintainer:     oss@confer.health
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
+homepage:       https://github.com/reflex-frp/reflex-native
+bug-reports:    https://github.com/reflex-frp/reflex-native/issues
+
+library
+  default-language: Haskell2010
+  exposed-modules:
+    Kiwi
+    Kiwi.Raw.Constraint
+    Kiwi.Raw.Errors
+    Kiwi.Raw.Expression
+    Kiwi.Raw.Solver
+    Kiwi.Raw.Strength
+    Kiwi.Raw.Term
+    Kiwi.Raw.Types
+    Kiwi.Raw.Variable
+  hs-source-dirs: src
+  ghc-options:
+      -Wall -fwarn-tabs -funbox-strict-fields -O2
+  ghc-prof-options: -fprof-auto
+  include-dirs: kiwi/
+  c-sources:
+    cbits/hs-kiwi.cpp
+  extra-libraries: stdc++
+  build-depends:
+      base
+    , bytestring == 0.10.*
+    , mtl >= 2.1 && < 2.3
+    , text == 1.2.*
+
+test-suite kiwi-test
+  type: exitcode-stdio-1.0
+  main-is: main.hs
+  hs-source-dirs: test
+  default-language: Haskell2010
+  ghc-options: -O2 -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , hs-kiwi
+    , hspec == 2.4.*
+    , hspec-expectations-lifted == 0.10.*
+    , lifted-base == 0.2.*
+

@@ -54,7 +54,7 @@ test-suite TestViewBuilderSuite
   main-is: TestViewBuilderSuite.hs
   hs-source-dirs: test
   default-language: Haskell2010
-  ghc-options: -O2 -Wall -rtsopts -liconv
+  ghc-options: -O2 -Wall -threaded -rtsopts -with-rtsopts=-N -liconv
   build-depends:
       base
     , containers == 0.5.*
