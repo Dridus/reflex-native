@@ -1,8 +1,11 @@
 packages:
   examples/draggy/
+  hs-kiwi/
   hs-uikit/
   reflex-native/
   reflex-native-uikit/
+package hs-kiwi
+  ghc-options: -Werror
 package hs-uikit
   ghc-options: -Werror
 package reflex-native

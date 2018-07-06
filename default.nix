@@ -4,6 +4,7 @@ rec {
   # build environment.
   packages = {
     common = haskellPackages: {
+      hs-kiwi = haskellPackages.callPackage ./hs-kiwi {};
       reflex-native = haskellPackages.callCabal2nix "reflex-native" ./reflex-native {};
       reflex-native-draggy = haskellPackages.callPackage ./examples/draggy {};
       reflex-native-test = haskellPackages.callCabal2nix "reflex-native-test" ./reflex-native-test {};
@@ -67,30 +68,32 @@ rec {
   ghcIosArm64 = reflex-platform.ghcIosArm64.override { overrides = overrides.ios; };
 
   # Shell environments for the various platforms
-  shells = {
+  shells = let
+    common = ["hs-kiwi" "reflex-native" "reflex-native-draggy"];
+  in nixpkgs.lib.mapAttrs (k: drv: drv.overrideAttrs (_: { shellHook = "runHook preConfigureHooks; runHook setupHook"; })) {
     # Shell environment for working on the cross-platform bits only, notably the test framework.
-    host = (reflex-platform.workOnMulti' {
+    host = reflex-platform.workOnMulti' {
       env = ghcHost;
-      packageNames = ["reflex-native" "reflex-native-draggy" "reflex-native-test"];
-    });
+      packageNames = common ++ ["reflex-native-test"];
+    };
 
     # Shell environment for working on the Android side with Android related packages and common packages.
-    android = (reflex-platform.workOnMulti' {
+    android = reflex-platform.workOnMulti' {
       env = ghcAndroidArm64;
-      packageNames = ["reflex-native" "reflex-native-draggy"];
-    });
+      packageNames = common ++ [];
+    };
 
     # Shell environment for working on the iOS side with the UIKit related packages, common packages, and any special environmental magics to get iOS cross
     # building working in a shell
-    ios = (reflex-platform.workOnMulti' {
+    ios = reflex-platform.workOnMulti' {
       env = ghcIosArm64;
-      packageNames = ["hs-uikit" "reflex-native" "reflex-native-draggy" "reflex-native-uikit"];
+      packageNames = common ++ ["hs-uikit" "reflex-native-uikit"];
 
       # special magics to get the preConfigureHook which adds the framework search paths for iOS frameworks
       # ideally this would not be necessary, and it isn't if haskellPackages generic-builder is doing the work, but since we're running cabal manually it's
       # needed
       tools = env: [ iosArm64.buildPackages.osx_sdk ];
-    }).overrideAttrs (_: { shellHook = "runHook preConfigureHooks"; });
+    };
   };
 
   # Derivations for building each of the examples, grouped by the target platform
