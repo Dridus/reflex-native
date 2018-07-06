@@ -1,0 +1,32 @@
+name:           hs-androidui
+version:        0.1.0.0
+synopsis:       Bindings to Android UI libraries (android.view et al)
+description:    FFI bindings for Android SDK, focusing on UI applications
+author:         Confer Health
+maintainer:     oss@confer.health
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
+homepage:       https://github.com/reflex-frp/reflex-native
+bug-reports:    https://github.com/reflex-frp/reflex-native/issues
+
+library
+  default-language: Haskell2010
+  exposed-modules:
+      Android.View.Types
+  hs-source-dirs: src
+  ghc-options:
+      -Wall -fwarn-tabs -funbox-strict-fields -O2 -fspecialise-aggressively -ddump-simpl -ddump-to-file -dsuppress-coercions -dsuppress-idinfo
+  ghc-prof-options: -fprof-auto
+  build-depends:
+      base
+    , foreign-jni == 1.2.*
+    , text == 1.2.*
+    , transformers-base == 0.4.*
+  frameworks:
+      CoreGraphics
+      Foundation
+      QuartzCore
+      UIKit
+

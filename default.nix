@@ -12,6 +12,8 @@ rec {
     host = packages.common;
 
     android = haskellPackages: packages.common haskellPackages // {
+      hs-androidui = haskellPackages.callPackage ./hs-androidui {};
+      reflex-native-android = haskellPackages.callCabal2nix "reflex-native-android" ./reflex-native-android {};
     };
 
     ios = haskellPackages: packages.common haskellPackages // {
@@ -32,6 +34,12 @@ rec {
   # Alias to the iOS cross-building nixpkgs from reflex-platform. Useful when nix REPLing.
   iosArm64 = reflex-platform.nixpkgsCross.ios.arm64.pkgs;
 
+  # Alias to the Android 64-bit cross-building nixpkgs from reflex-platform. Useful when nix REPLing.
+  androidArm64 = reflex-platform.nixpkgsCross.android.arm64Impure.pkgs;
+
+  # Alias to the Android 32-bit cross-building nixpkgs from reflex-platform. Useful when nix REPLing.
+  androidArmv7a = reflex-platform.nixpkgsCross.android.armv7aImpure.pkgs;
+
   # What overrides we make to a haskellPackages for each platform, both external dependencies that we adjust and local packages.
   overrides = {
     common = self: super: {
@@ -47,44 +55,50 @@ rec {
         repo = "reflex";
         rev = "9fcbf0792702f48185736cd4bebc2973f299e848";
         sha256 = "1p5b7gp1vwhq1slhfgbdlrgk5xll431rkzg3bzq15j8k9qy4b2bc";
-      }) {}) "fast-weak";
+      }) { useTemplateHaskell = false; }) "fast-weak";
     };
 
     host = nixpkgs.lib.composeExtensions overrides.common (self: super: packages.common self);
 
     android = nixpkgs.lib.composeExtensions overrides.common (self: super: packages.android self);
 
-    ios = nixpkgs.lib.composeExtensions overrides.common (self: super: packages.ios self // { reflex = super.reflex.override { useTemplateHaskell = false; }; });
+    ios = nixpkgs.lib.composeExtensions overrides.common (self: super: packages.ios self);
   };
 
   # haskellPackages for the host extended with our local overrides.
   ghcHost = reflex-platform.ghc8_2_1.override { overrides = overrides.host; };
 
-  # haskellPackages for Android extended with our local overrides.
+  # haskellPackages for Android 64-bit extended with our local overrides.
   ghcAndroidArm64 = reflex-platform.ghcAndroidArm64.override { overrides = overrides.android; };
+
+  # haskellPackages for Android 32-bit extended with our local overrides.
+  ghcAndroidArmv7a = reflex-platform.ghcAndroidArmv7a.override { overrides = overrides.android; };
 
   # haskellPackages for iOS extended with our local overrides.
   ghcIosArm64 = reflex-platform.ghcIosArm64.override { overrides = overrides.ios; };
 
   # Shell environments for the various platforms
-  shells = {
+  shells = let
+    common = ["reflex-native"];
+    examples = ["reflex-native-draggy"];
+  in {
     # Shell environment for working on the cross-platform bits only, notably the test framework.
     host = (reflex-platform.workOnMulti' {
       env = ghcHost;
-      packageNames = ["reflex-native" "reflex-native-draggy" "reflex-native-test"];
+      packageNames = common ++ examples ++ ["reflex-native-test"];
     });
 
     # Shell environment for working on the Android side with Android related packages and common packages.
     android = (reflex-platform.workOnMulti' {
       env = ghcAndroidArm64;
-      packageNames = ["reflex-native" "reflex-native-draggy"];
+      packageNames = common ++ examples ++ ["hs-androidui" "reflex-native-android"];
     });
 
     # Shell environment for working on the iOS side with the UIKit related packages, common packages, and any special environmental magics to get iOS cross
     # building working in a shell
     ios = (reflex-platform.workOnMulti' {
       env = ghcIosArm64;
-      packageNames = ["hs-uikit" "reflex-native" "reflex-native-draggy" "reflex-native-uikit"];
+      packageNames = common ++ examples ++ ["hs-uikit" "reflex-native-uikit"];
 
       # special magics to get the preConfigureHook which adds the framework search paths for iOS frameworks
       # ideally this would not be necessary, and it isn't if haskellPackages generic-builder is doing the work, but since we're running cabal manually it's
@@ -95,6 +109,17 @@ rec {
 
   # Derivations for building each of the examples, grouped by the target platform
   examples = {
+    # Derivations for building iOS app examples
+    android = {
+      # Derivation for building the reflex-native-draggy example as a packaged iOS app.
+      draggy = (reflex-platform.androidWithHaskellPackages { inherit ghcAndroidArm64 ghcAndroidArmv7a; }).buildApp {
+        package = p: p.reflex-native-draggy;
+        executableName = "reflex-native-draggy-android";
+        applicationId = "org.reflexfrp.reflex-native-draggy";
+        displayName = "Reflex Native Draggy";
+      };
+    };
+
     # Derivations for building iOS app examples
     ios = {
       # Derivation for building the reflex-native-draggy example as a packaged iOS app.
