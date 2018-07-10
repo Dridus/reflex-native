@@ -1,3 +1,5 @@
 _build/
 result
 .ghc.environment.*
+host.project
+ios.project

@@ -79,9 +79,9 @@ public:
 	}
 
   // 2018-07-05 RMM: added this to let Haskell see the symbolic identity
-  void* identity() const
+  const void* identity() const
   {
-    return m_data;
+    return reinterpret_cast<const void*>(m_data.data());
   }
 
 private:

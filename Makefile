@@ -5,6 +5,8 @@ bash = $(shell nix-instantiate --eval -E '(import <nixpkgs> {}).bash + /bin/bash
 cabal_files = $(shell find . -type f -a -name '*.cabal' | grep -v '^[.]/_build' | grep -v '^[.]/[.]')
 nix_files = default.nix $(shell find . -type f -a -name default.nix | grep -v '^[.]/_build' | grep -v '^[.]/[.]')
 bash = $(shell nix-instantiate --eval -E '(import <nixpkgs> {}).bash + /bin/bash')
+libcxx_host = $(shell nix-instantiate --eval -E '"$${(import ./.).nixpkgs.libcxx}"')
+libcxx_ios = $(shell nix-instantiate --eval -E '"$${(import ./.).iosArm64.libcxx}"')
 
 .PHONY: all clean $(platforms)
 
@@ -28,12 +30,19 @@ ios: _build/ios/shell ios.project
 	set -eo pipefail ; env -i $(bash) _build/ios/shell cabal --project-file=ios.project --builddir=_build/ios/dist new-build reflex-native 2>&1 | sed -e 's,^src/,reflex-native/src/,g'
 	set -eo pipefail ; env -i $(bash) _build/ios/shell cabal --project-file=ios.project --builddir=_build/ios/dist new-build reflex-native-draggy 2>&1 | sed -e 's,^src/,examples/draggy/src/,g'
 
+host.project: _build/host/shell host.project.template
+	sed -e "s,@libcxx@,$(libcxx_host),g" < host.project.template > host.project
+
+ios.project: _build/ios/shell ios.project.template
+	sed -e "s,@libcxx@,$(libcxx_ios),g" < ios.project.template > ios.project
+
 clean:
 	rm -rf _build
+	rm -f host.project ios.project android.project
 
 all: $(platforms)
 
-_build/%/shell: $(nix_files) $(cabal_files)
+_build/%/shell: Makefile $(nix_files) $(cabal_files)
 	mkdir -p $(dir $@)
 	mkdir -p _build/$*/nix-root
 	rm -f $@

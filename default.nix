@@ -66,6 +66,7 @@ rec {
     host = reflex-platform.workOnMulti' {
       env = ghcHost;
       packageNames = common ++ ["reflex-native-test"];
+      tools = env: [ nixpkgs.cc ]; # without this, cc-wrapper isn't on PATH and so cabal can't detect that libstdc++ is around
     };
 
     # Shell environment for working on the Android side with Android related packages and common packages.
@@ -83,7 +84,10 @@ rec {
       # special magics to get the preConfigureHook which adds the framework search paths for iOS frameworks
       # ideally this would not be necessary, and it isn't if haskellPackages generic-builder is doing the work, but since we're running cabal manually it's
       # needed
-      tools = env: [ iosAarch64.buildPackages.darwin.xcode_8_2 ];
+      tools = env: [
+        nixpkgs.cc # without this, cc-wrapper isn't on PATH and so cabal can't detect that libstdc++ is around
+        iosAarch64.buildPackages.darwin.xcode_8_2
+      ];
     }).overrideAttrs (_: { shellHook = "runHook preConfigureHooks"; });
   };
 

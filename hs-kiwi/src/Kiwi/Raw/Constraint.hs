@@ -10,10 +10,10 @@ module Kiwi.Raw.Constraint
   , new
 
   -- * Accessor functions
-  , getExpression, getOp, getStrength
+  , getExpression, getOperator, getStrength
 
   -- * Raw FFI bindings
-  , kiwiConstraint_new, kiwiConstraint_free, kiwiConstraint_getExpression, kiwiConstraint_getOp, kiwiConstraint_getStrength
+  , kiwiConstraint_new, kiwiConstraint_free, kiwiConstraint_getExpression, kiwiConstraint_getOperator, kiwiConstraint_getStrength
   ) where
 
 import Control.Monad ((=<<))
@@ -47,18 +47,23 @@ getExpression constraintFp =
     newForeignPtr kiwiExpression_free =<< kiwiConstraint_getExpression constraintP
 
 -- |Get the operator relating the 'Constraint's expression to 0.
-getOp :: Constraint -> IO RelationalOperator
-getOp constraintFp =
-  toEnum . fromIntegral <$> withForeignPtr constraintFp kiwiConstraint_getOp
+getOperator :: Constraint -> IO RelationalOperator
+getOperator constraintFp =
+  toEnum . fromIntegral <$> withForeignPtr constraintFp kiwiConstraint_getOperator
 
 -- |Get the strength of the 'Constraint' in the constraint system.
 getStrength :: Constraint -> IO Strength
 getStrength constraintFp =
   rawStrength <$> withForeignPtr constraintFp kiwiConstraint_getStrength
 
+-- |Raw FFI binding to @new Constraint(Expression&, RelationalOperator, double)@
 foreign import ccall unsafe kiwiConstraint_new :: Ptr ExpressionType -> CInt -> Double -> IO (Ptr ConstraintType)
+-- |Raw FFI binding to @delete@ for @Constraint*@
 foreign import ccall unsafe "&kiwiConstraint_free" kiwiConstraint_free :: FunPtr (Ptr ConstraintType -> IO ())
+-- |Raw FFI binding to @Expression& Constraint::expression() const@
 foreign import ccall unsafe kiwiConstraint_getExpression :: Ptr ConstraintType -> IO (Ptr ExpressionType)
-foreign import ccall unsafe kiwiConstraint_getOp :: Ptr ConstraintType -> IO CInt
+-- |Raw FFI binding to @RelationalOperator Constraint::op() const@
+foreign import ccall unsafe kiwiConstraint_getOperator :: Ptr ConstraintType -> IO CInt
+-- |Raw FFI binding to @double Constraint::strength() const@
 foreign import ccall unsafe kiwiConstraint_getStrength :: Ptr ConstraintType -> IO Double
 

@@ -13,6 +13,7 @@ module Kiwi.Raw.Solver
   , kiwiSolver_removeEditVariable, kiwiSolver_hasEditVariable, kiwiSolver_suggestValue, kiwiSolver_updateVariables, kiwiSolver_reset, kiwiSolver_dump
   ) where
 
+import Foreign.C.Types (CInt(..))
 import Foreign.ForeignPtr (newForeignPtr, withForeignPtr)
 import Foreign.Ptr (FunPtr, Ptr)
 import Kiwi.Raw.Errors (ErrorStructType, KiwiError, withErroringCall)
@@ -57,7 +58,7 @@ hasConstraint :: Solver -> Constraint -> IO Bool
 hasConstraint solverFp constraintFp =
   withForeignPtr solverFp $ \ solverP ->
   withForeignPtr constraintFp $ \ constraintP ->
-    kiwiSolver_hasConstraint solverP constraintP
+    (/= 0) <$> kiwiSolver_hasConstraint solverP constraintP
 
 -- |Add an edit 'Variable' to a 'Solver', updating the optimization solution.
 --
@@ -94,7 +95,7 @@ hasEditVariable :: Solver -> Variable -> IO Bool
 hasEditVariable solverFp variable =
   withForeignPtr solverFp $ \ solverP ->
   withForeignPtr (_variable_ptr variable) $ \ variableP ->
-    kiwiSolver_hasEditVariable solverP variableP
+    (/= 0) <$> kiwiSolver_hasEditVariable solverP variableP
 
 -- |Suggest the value an edit 'Variable' should have in the constraint system.
 --
@@ -134,13 +135,13 @@ foreign import ccall unsafe kiwiSolver_addConstraint :: Ptr SolverType -> Ptr Co
 -- |Raw binding to @void Solver::removeConstraint(const Constraint&)@
 foreign import ccall unsafe kiwiSolver_removeConstraint :: Ptr SolverType -> Ptr ConstraintType -> IO (Ptr ErrorStructType)
 -- |Raw binding to @bool Solver::hasConstraint(const Constraint&)@
-foreign import ccall unsafe kiwiSolver_hasConstraint :: Ptr SolverType -> Ptr ConstraintType -> IO Bool
+foreign import ccall unsafe kiwiSolver_hasConstraint :: Ptr SolverType -> Ptr ConstraintType -> IO CInt
 -- |Raw binding to @void Solver::addEditVariable(const Variable&)@
 foreign import ccall unsafe kiwiSolver_addEditVariable :: Ptr SolverType -> Ptr VariableType -> Double -> IO (Ptr ErrorStructType)
 -- |Raw binding to @void Solver::removeEditVariable(const Variable&)@
 foreign import ccall unsafe kiwiSolver_removeEditVariable :: Ptr SolverType -> Ptr VariableType -> IO (Ptr ErrorStructType)
 -- |Raw binding to @bool Solver::hasEditVariable(const Variable&) const@
-foreign import ccall unsafe kiwiSolver_hasEditVariable :: Ptr SolverType -> Ptr VariableType -> IO Bool
+foreign import ccall unsafe kiwiSolver_hasEditVariable :: Ptr SolverType -> Ptr VariableType -> IO CInt
 -- |Raw binding to @void Solver::suggestValue(const Variable&, double)@
 foreign import ccall unsafe kiwiSolver_suggestValue :: Ptr SolverType -> Ptr VariableType -> Double -> IO (Ptr ErrorStructType)
 -- |Raw binding to @void Solver::updateVariables()@

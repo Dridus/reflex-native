@@ -50,17 +50,17 @@ required = mkStrength 1000 1000 1000
 --
 -- Equivalent to @'mkStrength' 1 0 0@.
 strong :: Strength
-strong = mkStrength 1000 1000 1000
+strong = mkStrength 1000 0 0
 
 -- |The medium strength.
 --
 -- Equivalent to @'mkStrength' 0 1 0@.
 medium :: Strength
-medium = mkStrength 1000 1000 1000
+medium = mkStrength 0 1000 0
 
 -- |The weak strength.
 --
 -- Equivalent to @'mkStrength' 0 0 1@.
 weak :: Strength
-weak = mkStrength 1000 1000 1000
+weak = mkStrength 0 0 1000
 

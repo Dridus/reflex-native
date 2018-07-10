@@ -49,12 +49,12 @@ module Kiwi
   -- ** 'Expression' and implicit promotion
   , Expression(..), AsExpression(..)
   -- ** Operators to construct expressions
-  , (*:), mulE, (/:), divE, (+:), addE, (-:), subE, negateE
+  , (*:), mulE, (/:), divE, (+:), addE, (-:), subE, negateE, constE
   -- * Constraints
   , Constraint(..), RelationalOperator(..), (==@), eqC, (<=@), leC, (>=@), geC
   , module Kiwi.Raw.Strength
   -- * Monad for using a 'Solver'
-  , withNewSolver, withSolver, resetSolver, editVariable, constrain
+  , Solver, withNewSolver, withSolver, resetSolver, editVariable, constrain
   , addEditVariable, hasEditVariable, removeEditVariable, suggestValue
   , addConstraint, hasConstraint, removeConstraint
   , module Kiwi.Raw.Errors
@@ -76,7 +76,7 @@ import qualified Kiwi.Raw.Constraint as RawConstraint
 import Kiwi.Raw.Errors (KiwiError(..))
 import qualified Kiwi.Raw.Expression as RawExpression
 import qualified Kiwi.Raw.Solver as Solver
-import Kiwi.Raw.Strength (Strength, required, strong, medium, weak)
+import Kiwi.Raw.Strength (Strength, required, strong, medium, weak, mkStrength, mkStrengthWeighted)
 import qualified Kiwi.Raw.Term as RawTerm
 import Kiwi.Raw.Types (Solver, Variable)
 import qualified Kiwi.Raw.Types as Raw
@@ -181,7 +181,7 @@ instance Show Expression where
   showsPrec d (Expression ts c) =
     showParen (d > 6)
       $ foldr (\ t r -> showsPrec 7 t . showString " +: " . r) id ts
-      . showString " +: "
+      . showString "constE "
       . showsPrec 7 c
 
 -- |Class of things ('Expression's and 'Term's) which can be trivially converted to an 'Expression' for building with 'expression'.
@@ -366,6 +366,10 @@ a -: b = a +: negateE b
 -- @
 negateE :: AsExpression a => a -> Expression
 negateE = (*: (-1)) . asExpression
+
+-- |Convert a literal 'Double' into an 'Expression'. Helper to fix types where they would be ambiguous, usually when adding a constant to an 'Expression'.
+constE :: Double -> Expression
+constE = asExpression
 
 -- |A constraint that can be added to the constraint system and optimized, consisting of some 'Expression' and its intended relation to 0. The strength of
 -- the constraint is established when it's converted into a 'Raw.Constraint'.
@@ -592,21 +596,21 @@ instance HasValue Raw.Expression where
   getValue = liftIO . RawExpression.getValue
 
 -- |Build a 'Raw.Term' from a 'Term' or 'Variable' by way of 'AsTerm'.
-rawTerm :: AsTerm a => a -> IO Raw.Term
+rawTerm :: (AsTerm a, MonadIO m) => a -> m Raw.Term
 rawTerm a =
   let Term v f = asTerm a
-  in RawTerm.new v f
+  in liftIO $ RawTerm.new v f
 
 -- |Build an 'Raw.Expression' from EDSL description, which can be an 'Expression', 'Term', 'Variable', or 'Double' by way of 'AsExpression'.
-rawExpression :: AsExpression a => a -> IO Raw.Expression
+rawExpression :: (AsExpression a, MonadIO m) => a -> m Raw.Expression
 rawExpression a = do
   let Expression ts c = asExpression a
   rawTerms <- traverse rawTerm ts
-  RawExpression.new rawTerms c
+  liftIO $ RawExpression.new rawTerms c
 
 -- |Build a 'Raw.Constraint' from a 'Constraint'.
-rawConstraint :: Strength -> Constraint -> IO Raw.Constraint
+rawConstraint :: MonadIO m => Strength -> Constraint -> m Raw.Constraint
 rawConstraint str (Constraint expr op) = do
   rawExpr <- rawExpression expr
-  RawConstraint.new rawExpr op str
+  liftIO $ RawConstraint.new rawExpr op str
 

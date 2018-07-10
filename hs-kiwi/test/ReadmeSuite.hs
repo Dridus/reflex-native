@@ -1,8 +1,10 @@
+{-# LANGUAGE OverloadedStrings #-}
 module ReadmeSuite (suite) where
 
+import Control.Monad.Trans.Class (lift)
 import Kiwi
-import Test.Hspec (Spec, specify)
-import Test.Hspec.Expectations.Lifted (shouldBe, shouldSatisfy)
+import Test.Hspec (Expectation, Spec, specify)
+import Test.Hspec.Expectations.Lifted (shouldBe, shouldReturn, shouldSatisfy)
 
 
 suite :: Spec
@@ -11,10 +13,10 @@ suite = do
     xl <- variable "xl"
     xm <- editVariable strong "xm"
     xr <- variable "xr"
-    constrain required $ xm *. 2 ==@ xl +: xr
-    constrain required $ xl +: 10 <=@ xr
-    constrain required $ xr <=@ 100
-    constrain required $ 0 <=@ xl
+    constrain required (xm *. 2 ==@ xl +: xr) `shouldReturn` Right ()
+    constrain required (xl +: constE 10 <=@ xr) `shouldReturn` Right ()
+    constrain required (xr <=@ constE 100) `shouldReturn` Right ()
+    constrain required (constE 0 <=@ xl) `shouldReturn` Right ()
     updateVariables
     xlv <- getValue xl
     xmv <- getValue xm
@@ -25,3 +27,4 @@ suite = do
     xrv `shouldSatisfy` (<= 100)
     xlv `shouldSatisfy` (>= 0)
 
+    lift (pure () :: Expectation)

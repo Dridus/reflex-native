@@ -1,12 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 module TermSuite (suite) where
 
+import Data.Foldable (for_)
 import Kiwi
-import qualified Kiwi.Raw.Constraint as RawConstraint
-import qualified Kiwi.Raw.Expression as RawExpression
 import qualified Kiwi.Raw.Term as RawTerm
-import qualified Kiwi.Raw.Variable as RawVariable
-import Test.Hspec (Spec, specify)
+import Test.Hspec (Expectation, Spec, specify)
 import Test.Hspec.Expectations.Lifted (shouldBe, shouldMatchList, shouldReturn)
 
 
@@ -31,12 +29,14 @@ suite = do
     negateT t `shouldBe` Term v (-10)
     t *. 2 `shouldBe` Term v 20
     t /. 2 `shouldBe` Term v 5
-    t +: 2 `shouldBe` Expression [Term v 10] 2
+    t +: constE 2 `shouldBe` Expression [Term v 10] 2
     t +: v2 `shouldBe` Expression [Term v 10, Term v2 1] 0
     t +: t2 `shouldBe` Expression [Term v 10, Term v2 1] 0
-    t -: 2 `shouldBe` Expression [Term v 10] (-2)
+    t -: constE 2 `shouldBe` Expression [Term v 10] (-2)
     t -: v2 `shouldBe` Expression [Term v 10, Term v2 (-1)] 0
     t -: t2 `shouldBe` Expression [Term v 10, Term v2 (-1)] 0
+
+    pure () :: Expectation
 
   specify "constraint operators" $ do
     v <- variable "foo"
@@ -45,9 +45,10 @@ suite = do
         t2 = v2 *. 20
 
     for_ [((<=@), RelationalOperator_Le), ((==@), RelationalOperator_Eq), ((>=@), RelationalOperator_Ge)] $ \ (op, relop) -> do
-      let c = t1 `op` (t2 +: 1)
+      let c = t1 `op` (t2 +: constE 1)
           e = _constraint_expression c
       _expression_terms e `shouldMatchList` [Term v 10, Term v2 (-20)]
       _expression_constant e `shouldBe` (-1)
-      _constraint_operation `shouldBe` relop
+      _constraint_operator c `shouldBe` relop
 
+    pure () :: Expectation
