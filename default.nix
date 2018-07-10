@@ -75,12 +75,14 @@ rec {
     host = reflex-platform.workOnMulti' {
       env = ghcHost;
       packageNames = common ++ ["reflex-native-test"];
+      tools = env: [ nixpkgs.cc ]; # without this, cc-wrapper isn't on PATH and so cabal can't detect that libstdc++ is around
     };
 
     # Shell environment for working on the Android side with Android related packages and common packages.
     android = reflex-platform.workOnMulti' {
       env = ghcAndroidArm64;
       packageNames = common ++ [];
+      tools = env: [ nixpkgs.cc ]; # without this, cc-wrapper isn't on PATH and so cabal can't detect that libstdc++ is around
     };
 
     # Shell environment for working on the iOS side with the UIKit related packages, common packages, and any special environmental magics to get iOS cross
@@ -88,11 +90,10 @@ rec {
     ios = reflex-platform.workOnMulti' {
       env = ghcIosArm64;
       packageNames = common ++ ["hs-uikit" "reflex-native-uikit"];
-
-      # special magics to get the preConfigureHook which adds the framework search paths for iOS frameworks
-      # ideally this would not be necessary, and it isn't if haskellPackages generic-builder is doing the work, but since we're running cabal manually it's
-      # needed
-      tools = env: [ iosArm64.buildPackages.osx_sdk ];
+      tools = env: [
+        nixpkgs.cc # without this, cc-wrapper isn't on PATH and so cabal can't detect that libstdc++ is around
+        iosArm64.buildPackages.osx_sdk # without this, the preConfigure hook isn't augmented to include the iOS SDK framework search paths
+      ];
     };
   };
 

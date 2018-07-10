@@ -5,6 +5,8 @@ packages:
   reflex-native-test/
 package hs-kiwi
   ghc-options: -Werror
+  extra-include-dirs: @libcxx@/include/c++/v1
+  extra-lib-dirs: @libcxx@/lib
 package reflex-native
   ghc-options: -Werror
 package reflex-native-draggy

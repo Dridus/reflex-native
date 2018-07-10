@@ -8,13 +8,12 @@ module Kiwi.Raw.Errors
   , ErrorStructType, ErrorType(..), peekKiwiError, withErroringCall
   ) where
 
-import Control.Monad (liftM)
 import Data.ByteString.Char8 (packCString)
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
-import Foreign.C.Types (CInt)
+import Foreign.C.String (CString)
+import Foreign.C.Types (CInt(..))
 import Foreign.Ptr (Ptr, nullPtr)
-import Foreign.Storable (peekByteOff, sizeOf)
 
 
 data KiwiError
@@ -44,14 +43,14 @@ peekKiwiError :: Ptr ErrorStructType -> IO (Maybe KiwiError)
 peekKiwiError p
   | p == nullPtr = pure Nothing
   | otherwise =
-    toEnum  . (fromIntegral :: CInt -> Int) <$> peekByteOff p 0 >>= \ case
+    toEnum  . (fromIntegral :: CInt -> Int) <$> kiwiError_getType p >>= \ case
       ErrorType_UnsatisfiableConstraint -> pure . Just $ KiwiError_UnsatisfiableConstraint
       ErrorType_UnknownConstraint       -> pure . Just $ KiwiError_UnknownConstraint
       ErrorType_DuplicateConstraint     -> pure . Just $ KiwiError_DuplicateConstraint
       ErrorType_UnknownEditVariable     -> pure . Just $ KiwiError_UnknownEditVariable
       ErrorType_DuplicateEditVariable   -> pure . Just $ KiwiError_DuplicateEditVariable
       ErrorType_BadRequiredStrength     -> pure . Just $ KiwiError_BadRequiredStrength
-      ErrorType_InternalSolverError     -> liftM (Just . KiwiError_InternalSolverError . decodeUtf8) $ packCString =<< peekByteOff p (sizeOf (undefined :: CInt))
+      ErrorType_InternalSolverError     -> Just . KiwiError_InternalSolverError . decodeUtf8 <$> (packCString =<< kiwiError_getMessage p)
 
 withErroringCall :: IO (Ptr ErrorStructType) -> IO (Either KiwiError ())
 withErroringCall action = do
@@ -62,5 +61,7 @@ withErroringCall action = do
       kiwiError_free errorP
       pure $ Left e
 
+foreign import ccall unsafe kiwiError_getType :: Ptr ErrorStructType -> IO CInt
+foreign import ccall unsafe kiwiError_getMessage :: Ptr ErrorStructType -> IO CString
 foreign import ccall unsafe kiwiError_free :: Ptr ErrorStructType -> IO ()
 

@@ -58,31 +58,14 @@ Shells are provided for each of the platforms as attributes in `default.nix`:
 * `shells.ios` for iOS and the cross-platform components. See [iOS preqrequisites](#ios-prerequisites).
 * `shells.android` for Android and the cross-platform components.
 
-You can enter each of these with `nix-shell`, e.g. `nix-shell -A shells.ios`, and then use `cabal new-build` to do incremental builds within the shell.
-`cabal new-build` uses a project file to determine what packages to build and any configuration overrides to use when building them, and one is provided for
-each platform:
-
-* `host.project`
-* `ios.project`
-* `android.project`
-
-So for example to do an incremental build of the iOS components:
-
-1. `nix-shell -A shells.ios`
-2. `cabal --project-file=ios.project --builddir=_build/ios/dist new-build all`
-
-However as a development environment this leaves some things to be desired:
-
-* It's tedious to type every time
-* It doesn't work well with editor build functions which are typically not running inside the `nix-shell`
-* `nix-shell` takes a few moments to start even when it has nothing to build (exacerbating the previous issue)
-
-So, a `Makefile` is provided with targets for each platform which also builds each shell once and caches the environment.
+You can enter each of these with `nix-shell`, e.g. `nix-shell -A shells.ios`, to poke around. Note that a full build will not work without a ton of options to
+cabal so a `Makefile` is provided with targets for each platform which also builds each shell once, caches the environment, and substitutes the appropriate
+settings into the cabal project files.
 
 Make targets:
 
-* `make host` makes `_build/host/shell` by caching the `shells.host` `nix-shell` environment and runs
-`cabal --project-file=host.project --builddir=_build/ios/dist new-build all` in that environment. `host` is also the default Make target.
+* `make host` makes `_build/host/shell` by caching the `shells.host` `nix-shell` environment and generates `host.project` from `host.project.template`, then
+runs `cabal --project-file=host.project --builddir=_build/ios/dist new-build all` in that environment. `host` is also the default Make target.
 * `make ios` and `make android` do the same for iOS and Android respectively.
 * `make all` is equivalent to `make host ios android` in the unlikely circumstance your machine is capable of building all platforms.
 * `make clean` removes the `_build` directory where all the intermediate build products go.
