@@ -3,8 +3,8 @@ version:        0.1.0.0
 synopsis:       Unit testing for reflex-native UI components
 description:    Provides a test harness and headless test view builder for testing of UI components written for Reflex Native, and includes the test suite for
                 the Reflex Native adjusting builder.
-author:         Confer Health
-maintainer:     oss@confer.health
+author:         Ross MacLeod
+maintainer:     dridus@gmail.com
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
