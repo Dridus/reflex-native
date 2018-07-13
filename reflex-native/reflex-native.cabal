@@ -2,8 +2,8 @@ name:           reflex-native
 version:        0.1.0.0
 synopsis:       Cross platform layer for developing native Reflex apps
 description:    Provides a cross platform API for developing Reflex apps that are true native with no web views or javascript runtimes
-author:         Confer Health
-maintainer:     oss@confer.health
+author:         Ross MacLeod
+maintainer:     dridus@gmail.com
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple

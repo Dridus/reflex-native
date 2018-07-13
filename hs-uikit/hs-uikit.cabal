@@ -2,8 +2,8 @@ name:           hs-uikit
 version:        0.1.0.0
 synopsis:       Bindings to UIKit
 description:    FFI bindings for UIKit, Foundation, CoreGraphics, etc.
-author:         Confer Health
-maintainer:     oss@confer.health
+author:         Ross MacLeod
+maintainer:     dridus@gmail.com
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
