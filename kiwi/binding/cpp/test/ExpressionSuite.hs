@@ -2,9 +2,9 @@
 module ExpressionSuite (suite) where
 
 import Data.Foldable (for_)
-import Kiwi
-import qualified Kiwi.Raw.Expression as RawExpression
-import qualified Kiwi.Raw.Term as RawTerm
+import Kiwi.Cpp
+import qualified Kiwi.Cpp.Raw.Expression as RawExpression
+import qualified Kiwi.Cpp.Raw.Term as RawTerm
 import Prelude hiding (div)
 import Test.Hspec (Expectation, Spec, specify)
 import Test.Hspec.Expectations.Lifted (shouldBe, shouldMatchList, shouldReturn)
@@ -16,8 +16,8 @@ suite = do
     v <- variable "foo"
     v2 <- variable "bar"
     v3 <- variable "aux"
-    e1 <- rawExpression $ v *. 1 +: v2 *. 2 +: v3 *. 3
-    e2 <- rawExpression $ v *. 1 +: v2 *. 2 +: v3 *. 3 +: constE 10
+    e1 <- rawExpression $ varT v *. 1 +: varT v2 *. 2 +: varT v3 *. 3
+    e2 <- rawExpression $ varT v *. 1 +: varT v2 *. 2 +: varT v3 *. 3 +: constE 10
 
     for_ [(e1, 0), (e2, 10)] $ \ (e, val) -> do
       ts <- RawExpression.getTerms e
@@ -37,7 +37,7 @@ suite = do
     let t = Term v 10
         t2 = Term v2 1
         e = t +: constE 5
-        e2 = v2 -: constE 10
+        e2 = varT v2 -: constE 10
 
     let neg = negateE e
         neg_ts = _expression_terms neg
@@ -57,7 +57,7 @@ suite = do
     _expression_terms add `shouldMatchList` [Term v 10]
     _expression_constant add `shouldBe` 7
 
-    let add2 = e +: v2
+    let add2 = e +: varT v2
     _expression_terms add2 `shouldMatchList` [Term v 10, Term v2 1]
     _expression_constant add2 `shouldBe` 5
 
@@ -73,7 +73,7 @@ suite = do
     _expression_terms sub `shouldMatchList` [Term v 10]
     _expression_constant sub `shouldBe` 3
 
-    let sub2 = e -: v2
+    let sub2 = e -: varT v2
     _expression_terms sub2 `shouldMatchList` [Term v 10, Term v2 (-1)]
     _expression_constant sub2 `shouldBe` 5
 

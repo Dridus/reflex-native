@@ -1,26 +1,4 @@
 rec {
-  # Functions which extend a haskellPackages with the packages local to this repository and appropriate for the given platform using
-  # haskellPackages.callPackage. Used later to make augmented platform-specific package sets, but also useful for integrating Reflex Native into your Nix
-  # build environment.
-  packages = {
-    common = haskellPackages: {
-      hs-kiwi = haskellPackages.callPackage ./hs-kiwi {};
-      reflex-native = haskellPackages.callCabal2nix "reflex-native" ./reflex-native {};
-      reflex-native-draggy = haskellPackages.callPackage ./examples/draggy {};
-      reflex-native-test = haskellPackages.callCabal2nix "reflex-native-test" ./reflex-native-test {};
-    };
-
-    host = packages.common;
-
-    android = haskellPackages: packages.common haskellPackages // {
-    };
-
-    ios = haskellPackages: packages.common haskellPackages // {
-      hs-uikit = haskellPackages.callPackage ./hs-uikit {};
-      reflex-native-uikit = haskellPackages.callCabal2nix "reflex-native-uikit" ./reflex-native-uikit {};
-    };
-  };
-
   # Version of reflex-platform we use for iteration on Reflex Native and compiling the examples
   reflex-platform-src = (import <nixpkgs> {}).fetchFromGitHub (builtins.fromJSON (builtins.readFile ./reflex-platform-version.json));
 
@@ -33,29 +11,48 @@ rec {
   # Alias to the iOS cross-building nixpkgs from reflex-platform. Useful when nix REPLing.
   iosArm64 = reflex-platform.nixpkgsCross.ios.arm64.pkgs;
 
-  # What overrides we make to a haskellPackages for each platform, both external dependencies that we adjust and local packages.
-  overrides = {
+  # Functions which overlay a haskellPackages with the packages local to this repository and appropriate for the given platform using
+  # haskellPackages.callPackage. Used later to make augmented platform-specific package sets, but also useful for integrating Reflex Native into your Nix
+  # build environment.
+  overrides = let
+    inherit (nixpkgs) fetchFromGitHub;
+    inherit (nixpkgs.lib) composeExtensions;
+    inherit (nixpkgs.haskell.lib) dontCheck enableCabalFlag;
+  in rec {
     common = self: super: {
-      rank2classes = nixpkgs.haskell.lib.dontCheck (self.callCabal2nix "rank2classes" (nixpkgs.fetchFromGitHub {
+      rank2classes = dontCheck (self.callCabal2nix "rank2classes" (fetchFromGitHub {
         owner = "blamario";
         repo = "grampa";
         rev = "f35d8882ee6a60e91a86db339bdac94710d8bc6b";
         sha256 = "1ssv0lrbbj694rficrka56l628ha9l61wrnxqxy6yn9dawk6h6n8";
       } + /rank2classes) {});
 
-      reflex = nixpkgs.haskell.lib.enableCabalFlag (self.callPackage (nixpkgs.fetchFromGitHub {
+      reflex = enableCabalFlag (self.callPackage (fetchFromGitHub {
         owner = "reflex-frp";
         repo = "reflex";
         rev = "9fcbf0792702f48185736cd4bebc2973f299e848";
         sha256 = "1p5b7gp1vwhq1slhfgbdlrgk5xll431rkzg3bzq15j8k9qy4b2bc";
       }) { useTemplateHaskell = false; }) "fast-weak";
+
+      kiwi-dsl = self.callCabal2nix "kiwi-dsl" ./kiwi/dsl {};
+      reflex-native = self.callCabal2nix "reflex-native" ./reflex-native {};
+      reflex-native-draggy = self.callPackage ./examples/draggy {};
+      reflex-native-test = self.callCabal2nix "reflex-native-test" ./reflex-native-test {};
     };
 
-    host = nixpkgs.lib.composeExtensions overrides.common (self: super: packages.common self);
+    host = composeExtensions common (self: super: {
+      kiwi-cpp = self.callCabal2nix "kiwi-cpp" ./kiwi/binding/cpp {};
+    });
 
-    android = nixpkgs.lib.composeExtensions overrides.common (self: super: packages.android self);
+    android = composeExtensions common (self: super: {
+      kiwi-cpp = self.callCabal2nix "kiwi-cpp" ./kiwi/binding/cpp {};
+    });
 
-    ios = nixpkgs.lib.composeExtensions overrides.common (self: super: packages.ios self);
+    ios = composeExtensions common (self: super: {
+      kiwi-cpp = self.callCabal2nix "kiwi-cpp" ./kiwi/binding/cpp {};
+      hs-uikit = self.callPackage ./hs-uikit {};
+      reflex-native-uikit = self.callCabal2nix "reflex-native-uikit" ./reflex-native-uikit {};
+    });
   };
 
   # haskellPackages for the host extended with our local overrides.
@@ -69,19 +66,19 @@ rec {
 
   # Shell environments for the various platforms
   shells = let
-    common = ["hs-kiwi" "reflex-native" "reflex-native-draggy"];
+    common = ["kiwi-dsl" "reflex-native" "reflex-native-draggy"];
   in nixpkgs.lib.mapAttrs (k: drv: drv.overrideAttrs (_: { shellHook = "runHook preConfigureHooks; runHook setupHook"; })) {
     # Shell environment for working on the cross-platform bits only, notably the test framework.
     host = reflex-platform.workOnMulti' {
       env = ghcHost;
-      packageNames = common ++ ["reflex-native-test"];
+      packageNames = common ++ ["kiwi-cpp" "reflex-native-test"];
       tools = env: [ nixpkgs.cc ]; # without this, cc-wrapper isn't on PATH and so cabal can't detect that libstdc++ is around
     };
 
     # Shell environment for working on the Android side with Android related packages and common packages.
     android = reflex-platform.workOnMulti' {
       env = ghcAndroidArm64;
-      packageNames = common ++ [];
+      packageNames = common ++ ["kiwi-cpp"];
       tools = env: [ nixpkgs.cc ]; # without this, cc-wrapper isn't on PATH and so cabal can't detect that libstdc++ is around
     };
 
@@ -89,7 +86,7 @@ rec {
     # building working in a shell
     ios = reflex-platform.workOnMulti' {
       env = ghcIosArm64;
-      packageNames = common ++ ["hs-uikit" "reflex-native-uikit"];
+      packageNames = common ++ ["kiwi-cpp" "hs-uikit" "reflex-native-uikit"];
       tools = env: [
         nixpkgs.cc # without this, cc-wrapper isn't on PATH and so cabal can't detect that libstdc++ is around
         iosArm64.buildPackages.osx_sdk # without this, the preConfigure hook isn't augmented to include the iOS SDK framework search paths

@@ -2,11 +2,11 @@
 module ConstraintSuite (suite) where
 
 import Data.Foldable (for_)
-import Kiwi
-import qualified Kiwi.Raw.Constraint as RawConstraint
-import qualified Kiwi.Raw.Expression as RawExpression
-import qualified Kiwi.Raw.Term as RawTerm
-import qualified Kiwi.Raw.Variable as RawVariable
+import Kiwi.Cpp
+import qualified Kiwi.Cpp.Raw.Constraint as RawConstraint
+import qualified Kiwi.Cpp.Raw.Expression as RawExpression
+import qualified Kiwi.Cpp.Raw.Term as RawTerm
+import qualified Kiwi.Cpp.Raw.Variable as RawVariable
 import Test.Hspec (Expectation, Spec, specify)
 import Test.Hspec.Expectations.Lifted (shouldBe, shouldMatchList, shouldReturn)
 
@@ -15,7 +15,7 @@ suite :: Spec
 suite = do
   specify "creation" $ do
     v <- variable "foo"
-    let c = v +: constE 1 ==@ constE 0
+    let c = varT v +: constE 1 ==@ constE 0
     rc <- rawConstraint required c
     RawConstraint.getOperator rc `shouldReturn` RelationalOperator_Eq
     e <- RawConstraint.getExpression rc
@@ -34,7 +34,7 @@ suite = do
     v2 <- variable "bar"
     let t1 = Term v 10
         e1 = t1 +: constE 5
-        e2 = v2 -: constE 10
+        e2 = varT v2 -: constE 10
 
     for_ [((<=@), RelationalOperator_Le), ((==@), RelationalOperator_Eq), ((>=@), RelationalOperator_Ge)] $ \ (op, relop) -> do
       let c = e1 `op` e2

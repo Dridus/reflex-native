@@ -2,9 +2,9 @@
 module VariableSuite (suite) where
 
 import Data.Foldable (for_)
-import Kiwi
-import Kiwi.Raw.Types (Variable(..))
-import qualified Kiwi.Raw.Variable as RawVariable
+import Kiwi.Cpp
+import Kiwi.Cpp.Raw.Types (Variable(..))
+import qualified Kiwi.Cpp.Raw.Variable as RawVariable
 import Test.Hspec (Expectation, Spec, specify)
 import Test.Hspec.Expectations.Lifted (shouldBe, shouldMatchList, shouldReturn, shouldStartWith)
 
@@ -27,13 +27,13 @@ suite = do
     v <- variable "foo"
     v2 <- variable "bar"
 
-    negateT v `shouldBe` Term v (-1)
-    v *. 2 `shouldBe` Term v 2
-    v /. 2 `shouldBe` Term v 0.5
-    v +: constE 2 `shouldBe` Expression [Term v 1] 2
-    v +: v2 `shouldBe` Expression [Term v 1, Term v2 1] 0
-    v -: constE 2 `shouldBe` Expression [Term v 1] (-2)
-    v -: v2 `shouldBe` Expression [Term v 1, Term v2 (-1)] 0
+    negateT (varT v) `shouldBe` Term v (-1)
+    varT v *. 2 `shouldBe` Term v 2
+    varT v /. 2 `shouldBe` Term v 0.5
+    varT v +: constE 2 `shouldBe` Expression [Term v 1] 2
+    varT v +: varT v2 `shouldBe` Expression [Term v 1, Term v2 1] 0
+    varT v -: constE 2 `shouldBe` Expression [Term v 1] (-2)
+    varT v -: varT v2 `shouldBe` Expression [Term v 1, Term v2 (-1)] 0
 
     pure () :: Expectation
 
@@ -42,7 +42,7 @@ suite = do
     v2 <- variable "bar"
 
     for_ [((<=@), RelationalOperator_Le), ((==@), RelationalOperator_Eq), ((>=@), RelationalOperator_Ge)] $ \ (op, relop) -> do
-      let c = v `op` (v2 +: constE 1)
+      let c = varT v `op` (varT v2 +: constE 1)
           e = _constraint_expression c
       _expression_terms e `shouldMatchList` [Term v 1, Term v2 (-1)]
       _expression_constant e `shouldBe` (-1)

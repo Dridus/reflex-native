@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 -- |Representation of errors signalled by Kiwi when making Solver calls.
-module Kiwi.Raw.Errors
+module Kiwi.Cpp.Raw.Errors
   (
   -- * ADT representation
     KiwiError(..)

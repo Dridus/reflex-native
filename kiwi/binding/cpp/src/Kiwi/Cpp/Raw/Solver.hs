@@ -1,6 +1,6 @@
 -- |Methods of Kiwi's @Solver@ class, which represents the stateful incremental constraint solver to which 'Constraint's and edit 'Variable's can be added and
 -- removed dynamically while computing the optimal solution of the constraint system.
-module Kiwi.Raw.Solver
+module Kiwi.Cpp.Raw.Solver
   (
   -- * Creating new 'Solver's
     new
@@ -16,9 +16,9 @@ module Kiwi.Raw.Solver
 import Foreign.C.Types (CInt(..))
 import Foreign.ForeignPtr (newForeignPtr, withForeignPtr)
 import Foreign.Ptr (FunPtr, Ptr)
-import Kiwi.Raw.Errors (ErrorStructType, KiwiError, withErroringCall)
-import Kiwi.Raw.Strength (Strength, unStrength)
-import Kiwi.Raw.Types (Constraint, ConstraintType, Solver, SolverType, Variable(..), VariableType)
+import Kiwi.Cpp.Raw.Errors (ErrorStructType, KiwiError, withErroringCall)
+import Kiwi.Cpp.Raw.Types (Constraint, ConstraintType, Solver, SolverType, Variable(..), VariableType)
+import Kiwi.Dsl (Strength, unStrength)
 
 
 -- |Create a new 'Solver', empty of 'Constraint's and edit 'Variable's.
@@ -29,10 +29,10 @@ new = newForeignPtr kiwiSolver_free =<< kiwiSolver_new
 --
 -- May fail with:
 --
---     * 'Kiwi.Raw.Errors.KiwiError_DuplicateConstraint' if the constraint is already in the system.
---     * 'Kiwi.Raw.Errors.KiwiError_UnsatisfiableConstraint' if the constraint would make the system unsatisfiable (i.e. conflicts with one or more existing
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_DuplicateConstraint' if the constraint is already in the system.
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_UnsatisfiableConstraint' if the constraint would make the system unsatisfiable (i.e. conflicts with one or more existing
 --     constraints).
---     * 'Kiwi.Raw.Errors.KiwiError_InternalSolverError' if something really sad happens internally.
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_InternalSolverError' if something really sad happens internally.
 addConstraint :: Solver -> Constraint -> IO (Either KiwiError ())
 addConstraint solverFp constraintFp =
   withErroringCall $
@@ -44,8 +44,8 @@ addConstraint solverFp constraintFp =
 --
 -- May fail with:
 --
---     * 'Kiwi.Raw.Errors.KiwiError_UnknownConstraint' if the constraint is not in the system.
---     * 'Kiwi.Raw.Errors.KiwiError_InternalSolverError' if something really sad happens internally.
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_UnknownConstraint' if the constraint is not in the system.
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_InternalSolverError' if something really sad happens internally.
 removeConstraint :: Solver -> Constraint -> IO (Either KiwiError ())
 removeConstraint solverFp constraintFp =
   withErroringCall $
@@ -64,11 +64,11 @@ hasConstraint solverFp constraintFp =
 --
 -- May fail with:
 --
---     * 'Kiwi.Raw.Errors.KiwiError_DuplicateEditVariable' if the constraint is already in the system.
---     * 'Kiwi.Raw.Errors.KiwiError_UnsatisfiableConstraint' if the constraint would make the system unsatisfiable (i.e. conflicts with one or more existing
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_DuplicateEditVariable' if the constraint is already in the system.
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_UnsatisfiableConstraint' if the constraint would make the system unsatisfiable (i.e. conflicts with one or more existing
 --     constraints).
---     * 'Kiwi.Raw.Errors.KiwiError_BadRequiredStrength' if the strength given is required strength, which is not allowed for edit variables.
---     * 'Kiwi.Raw.Errors.KiwiError_InternalSolverError' if something really sad happens internally.
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_BadRequiredStrength' if the strength given is required strength, which is not allowed for edit variables.
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_InternalSolverError' if something really sad happens internally.
 addEditVariable :: Solver -> Variable -> Strength -> IO (Either KiwiError ())
 addEditVariable solverFp variable str =
   withErroringCall $
@@ -80,9 +80,9 @@ addEditVariable solverFp variable str =
 --
 -- May fail with:
 --
---     * 'Kiwi.Raw.Errors.KiwiError_UnknownVariable' if the variable is not in the system.
---     * 'Kiwi.Raw.Errors.KiwiError_UnknownConstraint' if the constraint is not in the system.
---     * 'Kiwi.Raw.Errors.KiwiError_InternalSolverError' if something really sad happens internally.
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_UnknownVariable' if the variable is not in the system.
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_UnknownConstraint' if the constraint is not in the system.
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_InternalSolverError' if something really sad happens internally.
 removeEditVariable :: Solver -> Variable -> IO (Either KiwiError ())
 removeEditVariable solverFp variable =
   withErroringCall $
@@ -101,8 +101,8 @@ hasEditVariable solverFp variable =
 --
 -- May fail with:
 --
---     * 'Kiwi.Raw.Errors.KiwiError_UnknownEditVariable' if the variable is not in the system.
---     * 'Kiwi.Raw.Errors.KiwiError_InternalSolverError' if something really sad happens internally.
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_UnknownEditVariable' if the variable is not in the system.
+--     * 'Kiwi.Cpp.Raw.Errors.KiwiError_InternalSolverError' if something really sad happens internally.
 suggestValue :: Solver -> Variable -> Double -> IO (Either KiwiError ())
 suggestValue solverFp variable value =
   withErroringCall $
@@ -111,7 +111,7 @@ suggestValue solverFp variable value =
       kiwiSolver_suggestValue solverP variableP value
 
 -- |Update the 'Variable's of the constraint system by updating them to reflect the internal solver state. The resulting values can be read out using
--- 'Kiwi.Raw.Expression.getValue', 'Kiwi.Raw.Term.getValue', or 'Kiwi.Raw.Variable.getValue'.
+-- 'Kiwi.Cpp.Raw.Expression.getValue', 'Kiwi.Cpp.Raw.Term.getValue', or 'Kiwi.Cpp.Raw.Variable.getValue'.
 updateVariables :: Solver -> IO ()
 updateVariables solverFp =
   withForeignPtr solverFp kiwiSolver_updateVariables

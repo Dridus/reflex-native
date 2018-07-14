@@ -1,6 +1,6 @@
--- |Methods of the Kiwi @Term@ class, which are linear terms of the form @v*f@ for some 'Kiwi.Raw.Variable' @v@ and coefficient @f@.
--- Used in an 'Kiwi.Raw.Expression' used to express constraints to solve.
-module Kiwi.Raw.Term
+-- |Methods of the Kiwi @Term@ class, which are linear terms of the form @v*f@ for some 'Kiwi.Cpp.Raw.Variable' @v@ and coefficient @f@.
+-- Used in an 'Kiwi.Cpp.Raw.Expression' used to express constraints to solve.
+module Kiwi.Cpp.Raw.Term
   (
   -- * Creating new 'Term's
     new
@@ -14,8 +14,8 @@ module Kiwi.Raw.Term
 
 import Foreign.ForeignPtr (newForeignPtr, withForeignPtr)
 import Foreign.Ptr (FunPtr, Ptr)
-import Kiwi.Raw.Types (Term, TermType, Variable(..), VariableType)
-import qualified Kiwi.Raw.Variable as Variable
+import Kiwi.Cpp.Raw.Types (Term, TermType, Variable(..), VariableType)
+import qualified Kiwi.Cpp.Raw.Variable as Variable
 
 
 -- |Create a new 'Term' by giving the 'Variable' and coefficient.

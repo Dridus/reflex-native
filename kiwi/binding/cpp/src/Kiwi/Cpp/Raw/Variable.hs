@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 -- |Methods of the Kiwi @Variable@ class, which are variables optimized by the constraint system.
-module Kiwi.Raw.Variable
+module Kiwi.Cpp.Raw.Variable
   (
   -- * Creating new 'Variable's
     new, adopt
@@ -20,11 +20,11 @@ import Data.Void (Void)
 import Foreign.C.String (CString)
 import Foreign.ForeignPtr (newForeignPtr, withForeignPtr)
 import Foreign.Ptr (FunPtr, Ptr)
-import Kiwi.Raw.Types (Variable(..), VariableType)
+import Kiwi.Cpp.Raw.Types (Variable(..), VariableType)
 
 
 -- |Create a new Kiwi 'Variable' with the given name which can be empty. Other than being retrievable later via 'getName', the name is only used when dumping
--- the Kiwi solver state via 'Kiwi.Raw.Solver.dump' or 'Show'ing.
+-- the Kiwi solver state via 'Kiwi.Cpp.Raw.Solver.dump' or 'Show'ing.
 new :: Text -> IO Variable
 new nameT =
   useAsCString (encodeUtf8 nameT) $

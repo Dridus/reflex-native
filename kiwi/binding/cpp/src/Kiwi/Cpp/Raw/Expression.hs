@@ -1,6 +1,6 @@
 -- |Methods for Kiwi's 'Expression' class, which represents linear expressions of the form @c + x1•f1 + x2•f2 + …@ to be solved by the constraint system.
--- Each @xn•fn@ is represented by a 'Kiwi.Raw.Types.Term', which can be created and manipulated using the "Kiwi.Raw.Term" module.
-module Kiwi.Raw.Expression
+-- Each @xn•fn@ is represented by a 'Kiwi.Cpp.Raw.Types.Term', which can be created and manipulated using the "Kiwi.Cpp.Raw.Term" module.
+module Kiwi.Cpp.Raw.Expression
   (
   -- * Creating new 'Expression's
     new
@@ -22,8 +22,8 @@ import Foreign.ForeignPtr (newForeignPtr, withForeignPtr, touchForeignPtr)
 import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
 import Foreign.Marshal.Array (peekArray)
 import Foreign.Ptr (FunPtr, Ptr)
-import Kiwi.Raw.Term (kiwiTerm_free)
-import Kiwi.Raw.Types (Expression, ExpressionType, Term, TermType)
+import Kiwi.Cpp.Raw.Term (kiwiTerm_free)
+import Kiwi.Cpp.Raw.Types (Expression, ExpressionType, Term, TermType)
 
 
 -- |Create a new 'Expression' given the 'Term's to sum along with independent constant.
