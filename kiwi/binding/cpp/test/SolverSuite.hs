@@ -5,10 +5,10 @@ module SolverSuite (suite) where
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Reader (ask)
-import Kiwi
-import qualified Kiwi.Raw.Constraint as RawConstraint
-import qualified Kiwi.Raw.Expression as RawExpression
-import qualified Kiwi.Raw.Term as RawTerm
+import Kiwi.Cpp
+import qualified Kiwi.Cpp.Raw.Constraint as RawConstraint
+import qualified Kiwi.Cpp.Raw.Expression as RawExpression
+import qualified Kiwi.Cpp.Raw.Term as RawTerm
 import Test.Hspec (Expectation, Spec, specify)
 import Test.Hspec.Expectations.Lifted (shouldBe, shouldReturn)
 
@@ -41,8 +41,8 @@ suite = do
 
   specify "managing constraints" . withNewSolver $ do
     v <- variable "foo"
-    rc1 <- rawConstraint required $ v >=@ constE 1
-    rc2 <- rawConstraint required $ v <=@ constE 0
+    rc1 <- rawConstraint required $ varT v >=@ constE 1
+    rc2 <- rawConstraint required $ varT v <=@ constE 0
 
     hasConstraint rc1 `shouldReturn` False
     addConstraint rc1 `shouldReturn` Right ()
@@ -63,7 +63,7 @@ suite = do
 
   specify "solving an under constrained system" . withNewSolver $ do
     v <- variable "foo"
-    rc <- rawConstraint required $ v *. 2 +: constE 1 >=@ constE 0
+    rc <- rawConstraint required $ varT v *. 2 +: constE 1 >=@ constE 0
 
     addEditVariable weak v `shouldReturn` Right ()
     addConstraint rc `shouldReturn` Right ()
@@ -84,18 +84,18 @@ suite = do
     v1 <- variable "foo"
     v2 <- variable "bar"
 
-    constrain required (v1 +: v2 ==@ constE 0) `shouldReturn` Right ()
-    constrain required (v1 ==@ constE 10) `shouldReturn` Right ()
-    constrain weak (v2 >=@ constE 0) `shouldReturn` Right ()
+    constrain required (varT v1 +: varT v2 ==@ constE 0) `shouldReturn` Right ()
+    constrain required (varT v1 ==@ constE 10) `shouldReturn` Right ()
+    constrain weak (varT v2 >=@ constE 0) `shouldReturn` Right ()
     updateVariables
     getValue v1 `shouldReturn` 10
     getValue v2 `shouldReturn` -10
 
     resetSolver
 
-    constrain required (v1 +: v2 ==@ constE 0) `shouldReturn` Right ()
-    constrain medium (v1 >=@ constE 10) `shouldReturn` Right ()
-    constrain strong (v2 ==@ constE 2) `shouldReturn` Right ()
+    constrain required (varT v1 +: varT v2 ==@ constE 0) `shouldReturn` Right ()
+    constrain medium (varT v1 >=@ constE 10) `shouldReturn` Right ()
+    constrain strong (varT v2 ==@ constE 2) `shouldReturn` Right ()
     updateVariables
     getValue v1 `shouldReturn` (-2)
     getValue v2 `shouldReturn` 2

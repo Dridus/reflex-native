@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- |Pointer phantom types and pointer type aliases representing each of the types in Kiwi.
-module Kiwi.Raw.Types
+module Kiwi.Cpp.Raw.Types
   (
   -- * Pointer types
     Constraint, Expression, Solver, Term

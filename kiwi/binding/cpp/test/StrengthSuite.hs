@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module StrengthSuite (suite) where
 
-import Kiwi
+import Kiwi.Cpp
 import Test.Hspec (Expectation, Spec, specify)
 import Test.Hspec.Expectations.Lifted (shouldSatisfy)
 

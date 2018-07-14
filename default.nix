@@ -2,14 +2,14 @@ rec {
   # Functions which extend a haskellPackages with the packages local to this repository using haskellPackages.callPackage. Used later to make augmented
   # platform-specific package sets, but also useful for integrating Reflex Native into your Nix build environment.
   packages = haskellPackages: {
-    hs-kiwi = haskellPackages.callPackage ./hs-kiwi {};
+    kiwi-dsl = haskellPackages.callPackage ./kiwi/dsl {};
+    kiwi-cpp = haskellPackages.callPackage ./kiwi/cpp {};
     hs-uikit = haskellPackages.callPackage ./hs-uikit {};
     reflex-native = haskellPackages.callCabal2nix "reflex-native" ./reflex-native {};
     reflex-native-draggy = haskellPackages.callPackage ./examples/draggy {};
     reflex-native-test = haskellPackages.callCabal2nix "reflex-native-test" ./reflex-native-test {};
     reflex-native-uikit = haskellPackages.callCabal2nix "reflex-native-uikit" ./reflex-native-uikit {};
   };
-
 
   # Version of reflex-platform we use for iteration on Reflex Native and compiling the examples
   reflex-platform-src = (import <nixpkgs> {}).fetchFromGitHub (builtins.fromJSON (builtins.readFile ./reflex-platform-version.json));
@@ -23,24 +23,11 @@ rec {
   # Alias to the iOS cross-building nixpkgs from reflex-platform. Useful when nix REPLing.
   iosAarch64 = reflex-platform.nixpkgsCross.ios.aarch64;
 
-  # What overrides we make to a haskellPackages for each platform, both external dependencies that we adjust and local packages.
+  # Functions which overlay a haskellPackages with the packages local to this repository and appropriate for the given platform using
+  # haskellPackages.callPackage. Used later to make augmented platform-specific package sets, but also useful for integrating Reflex Native into your Nix
+  # build environment.
   overrides = {
-    common = self: super: {
-      generic-lens = nixpkgs.haskell.lib.dontCheck super.generic-lens;
-      # rank2classes = nixpkgs.haskell.lib.dontCheck (self.callCabal2nix "rank2classes" (nixpkgs.fetchFromGitHub {
-      #   owner = "blamario";
-      #   repo = "grampa";
-      #   rev = "f35d8882ee6a60e91a86db339bdac94710d8bc6b";
-      #   sha256 = "1ssv0lrbbj694rficrka56l628ha9l61wrnxqxy6yn9dawk6h6n8";
-      # } + /rank2classes) {});
-
-      # reflex = nixpkgs.haskell.lib.enableCabalFlag (self.callPackage (nixpkgs.fetchFromGitHub {
-      #   owner = "reflex-frp";
-      #   repo = "reflex";
-      #   rev = "9fcbf0792702f48185736cd4bebc2973f299e848";
-      #   sha256 = "1p5b7gp1vwhq1slhfgbdlrgk5xll431rkzg3bzq15j8k9qy4b2bc";
-      # }) { useTemplateHaskell = false; }) "fast-weak";
-    };
+    common = self: super: {};
 
     host = nixpkgs.lib.composeExtensions overrides.common (self: super: packages self);
 
@@ -60,7 +47,7 @@ rec {
 
   # Shell environments for the various platforms
   shells = let
-    common = ["hs-kiwi" "hs-uikit" "reflex-native" "reflex-native-draggy" "reflex-native-uikit"];
+    common = ["kiwi-dsl" "kiwi-cpp" "hs-uikit" "reflex-native" "reflex-native-draggy" "reflex-native-uikit"];
   in nixpkgs.lib.mapAttrs (k: drv: drv.overrideAttrs (_: { shellHook = "runHook preConfigureHooks; runHook setupHook"; })) {
     # Shell environment for working on the cross-platform bits only, notably the test framework.
     host = reflex-platform.workOnMulti' {
@@ -73,6 +60,7 @@ rec {
     android = (reflex-platform.workOnMulti' {
       env = ghcAndroidAarch64;
       packageNames = common ++ [];
+      tools = env: [ nixpkgs.cc ]; # without this, cc-wrapper isn't on PATH and so cabal can't detect that libstdc++ is around
     });
 
     # Shell environment for working on the iOS side with the UIKit related packages, common packages, and any special environmental magics to get iOS cross

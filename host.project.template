@@ -1,13 +1,16 @@
 packages:
   examples/draggy/
-  hs-kiwi/
+  kiwi/binding/cpp/
+  kiwi/dsl/
   hs-uikit/
   reflex-native/
   reflex-native-test/
-package hs-kiwi
+package kiwi-cpp
   ghc-options: -Werror
   extra-include-dirs: @libcxx@/include/c++/v1
   extra-lib-dirs: @libcxx@/lib
+package kiwi-dsl
+  ghc-options: -Werror
 package hs-uikit
   ghc-options: -Werror
 package reflex-native

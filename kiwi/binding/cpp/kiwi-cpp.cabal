@@ -1,9 +1,10 @@
-name:           hs-kiwi
+name:           kiwi-cpp
 version:        0.1.0.0
-synopsis:       Bindings to the Kiwi layout constraint solver
-description:    Provides bindings to Kiwi, which implements the Cassowary layout constraint algorithm and can be used to declaratively lay out UI components.
-author:         Confer Health
-maintainer:     oss@confer.health
+synopsis:       Bindings to the Kiwi layout constraint solver C++ library
+description:    Provides bindings to Kiwi C++, which implements the Cassowary layout constraint algorithm and can be used to declaratively lay out UI
+                components.
+author:         Ross MacLeod
+maintainer:     dridus@gmail.com
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
@@ -14,15 +15,15 @@ bug-reports:    https://github.com/reflex-frp/reflex-native/issues
 library
   default-language: Haskell2010
   exposed-modules:
-    Kiwi
-    Kiwi.Raw.Constraint
-    Kiwi.Raw.Errors
-    Kiwi.Raw.Expression
-    Kiwi.Raw.Solver
-    Kiwi.Raw.Strength
-    Kiwi.Raw.Term
-    Kiwi.Raw.Types
-    Kiwi.Raw.Variable
+    Kiwi.Cpp
+    Kiwi.Cpp.DslBinding
+    Kiwi.Cpp.Raw.Constraint
+    Kiwi.Cpp.Raw.Errors
+    Kiwi.Cpp.Raw.Expression
+    Kiwi.Cpp.Raw.Solver
+    Kiwi.Cpp.Raw.Term
+    Kiwi.Cpp.Raw.Types
+    Kiwi.Cpp.Raw.Variable
   hs-source-dirs: src
   ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2
   ghc-prof-options: -fprof-auto
@@ -33,10 +34,11 @@ library
   build-depends:
       base
     , bytestring == 0.10.*
+    , kiwi-dsl == 0.1.*
     , mtl >= 2.1 && < 2.3
     , text == 1.2.*
 
-test-suite kiwi-test
+test-suite kiwi-cpp-test
   type: exitcode-stdio-1.0
   main-is: main.hs
   hs-source-dirs: test
@@ -52,7 +54,7 @@ test-suite kiwi-test
   ghc-options: -O2 -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base
-    , hs-kiwi
+    , kiwi-cpp
     , hspec == 2.4.*
     , hspec-expectations-lifted == 0.10.*
     , lifted-base == 0.2.*
