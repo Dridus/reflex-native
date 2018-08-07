@@ -34,6 +34,7 @@ library
     , exception-transformers == 0.4.*
     , generic-lens == 1.0.*
     , hspec-expectations == 0.8.*
+    , keys == 3.*
     , lens == 4.16.*
     , lifted-base == 0.2.*
     , monad-control == 1.0.*
@@ -45,6 +46,7 @@ library
     , reflex-native
     , stm == 2.4.*
     , text == 1.2.*
+    , these == 0.7.*
     , transformers >= 0.3 && < 0.6
     , transformers-base == 0.4.*
     , vector-space == 0.13.*

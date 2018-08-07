@@ -1,15 +1,38 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ExplicitNamespaces #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 -- |Cross-platform notions of geometry, such as points and rectangles.
 module Reflex.Native.Geometry
-  ( Point(..), Size(..), Rect(..) ) where
+  ( Axis(Horizontal, Vertical), KnownAxis(..)
+  , Point(..), Size(..), Rect(..)
+  ) where
 
 import Data.AdditiveGroup (AdditiveGroup(zeroV, (^+^), negateV, (^-^)))
 import Data.VectorSpace (VectorSpace(type Scalar, (*^)))
 import GHC.Generics (Generic)
 
+
+-- |Type representing either the horizontal (X) or vertical (Y) axis.
+-- Often used as a kind via @DataKinds@, i.e. @'Horizontal@ or @'Vertical@.
+data Axis
+  = Horizontal
+  | Vertical
+  deriving (Bounded, Enum, Eq, Generic, Ord, Show)
+
+-- |Class for reflecting an 'Axis' kind (with 'Horizontal' or 'Vertical' types) to an 'Axis' type (with 'Horizontal' or 'Vertical' data constructors).
+class KnownAxis (axis :: Axis) where
+  -- |Yield the 'Axis' data value for the given 'Axis'-kinded type, represented as a proxy.
+  axisVal :: proxy axis -> Axis
+
+-- |Instance for 'Horizontal'.
+instance KnownAxis 'Horizontal where
+  axisVal _ = Horizontal
+
+-- |Instance for 'Vertical'.
+instance KnownAxis 'Vertical where
+  axisVal _ = Vertical
 
 -- |2D point represented as X and Y coordinates given as @Double@s.
 --

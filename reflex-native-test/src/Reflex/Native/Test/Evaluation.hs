@@ -23,17 +23,16 @@ import Control.Monad.Trans.Class (lift)
 import Data.Functor.Identity (Identity)
 import Data.List (intercalate)
 import Data.Monoid (All, Any, Endo, First)
-import Data.Sequence (Seq)
 import GHC.Stack (HasCallStack)
 import Reflex.Host.Class (ReflexHost(type HostFrame), runHostFrame)
-import Reflex.Native.Test.Types (TestEnv(..), TestEvaluation(..), TestView, showTestViewHierarchy)
+import Reflex.Native.Test.Types (TestEnv(..), TestEvaluation(..), SomeTestViews(..), showTestViewHierarchy, withSomeTestViews)
 import Reflex.Spider.Internal (HasSpiderTimeline, SpiderTimeline)
 import Reflex.TriggerEvent.Base (TriggerEventT, runTriggerEventT)
 import qualified Test.Hspec.Expectations as Hspec
 
 
 -- |Get the current view hierarchy, updated each time 'processEventsAndRead' is run.
-askRootViews :: TestEvaluation x (Seq (TestView Identity))
+askRootViews :: TestEvaluation x (SomeTestViews (SpiderTimeline x) Identity)
 askRootViews = TestEvaluation get
 
 -- |Get whether the root has become ready.
@@ -50,11 +49,11 @@ runFrame action = TestEvaluation $ do
   lift $ runHostFrame (runTriggerEventT action chan)
 
 -- |Apply some @Fold@ to the current view hierarchy returning the results.
-selectFromViews :: Getting (Endo [a]) (Seq (TestView Identity)) a -> TestEvaluation x [a]
+selectFromViews :: Getting (Endo [a]) (SomeTestViews (SpiderTimeline x) Identity) a -> TestEvaluation x [a]
 selectFromViews f = TestEvaluation $ gets (toListOf f)
 
 -- |Apply some @Fold@ to the current view hierarchy returning the first result if any.
-lookupFromViews :: Getting (First a) (Seq (TestView Identity)) a -> TestEvaluation x (Maybe a)
+lookupFromViews :: Getting (First a) (SomeTestViews (SpiderTimeline x) Identity) a -> TestEvaluation x (Maybe a)
 lookupFromViews f = TestEvaluation $ gets (preview f)
 
 -- |Signal that an expectation failed with some message, aborting the test.
@@ -115,82 +114,82 @@ infixl 2 `shouldHave`, `shouldNotHave`, `shouldView`, `shouldPreview`, `shouldLi
 -- > s `shouldBe` t ≡ s `shouldHave` only t
 --
 -- @
--- shouldHave :: 'Getter'     (Seq ('TestView' Identity)) a -> 'TestEvaluation' x ()
--- shouldHave :: 'Fold'       (Seq ('TestView' Identity)) a -> 'TestEvaluation' x ()
--- shouldHave :: 'Iso''       (Seq ('TestView' Identity)) a -> 'TestEvaluation' x ()
--- shouldHave :: 'Lens''      (Seq ('TestView' Identity)) a -> 'TestEvaluation' x ()
--- shouldHave :: 'Traversal'' (Seq ('TestView' Identity)) a -> 'TestEvaluation' x ()
--- shouldHave :: 'Prism''     (Seq ('TestView' Identity)) a -> 'TestEvaluation' x ()
+-- shouldHave :: 'Getter'     (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldHave :: 'Fold'       (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldHave :: 'Iso''       (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldHave :: 'Lens''      (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldHave :: 'Traversal'' (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldHave :: 'Prism''     (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
 -- @
-shouldHave :: HasCallStack => Getting Any (Seq (TestView Identity)) a -> TestEvaluation x ()
+shouldHave :: HasCallStack => Getting Any (SomeTestViews (SpiderTimeline x) Identity) a -> TestEvaluation x ()
 shouldHave l = do
   vs <- askRootViews
   unless (has l vs) $
-    expectationFailure $ "Fold had zero targets but expected at least one in:\n" ++ intercalate "\n" (showTestViewHierarchy "  " vs)
+    expectationFailure $ "Fold had zero targets but expected at least one in:\n" ++ intercalate "\n" (withSomeTestViews vs $ showTestViewHierarchy "  ")
 
 -- | @shouldNotHave l@ sets the expectation that 'Fold' @l@ has exactly zero targets in the view hierarchy
 --
 -- @
--- shouldNotHave :: 'Getter'     (Seq ('TestView' Identity)) a -> 'TestEvaluation' x ()
--- shouldNotHave :: 'Fold'       (Seq ('TestView' Identity)) a -> 'TestEvaluation' x ()
--- shouldNotHave :: 'Iso''       (Seq ('TestView' Identity)) a -> 'TestEvaluation' x ()
--- shouldNotHave :: 'Lens''      (Seq ('TestView' Identity)) a -> 'TestEvaluation' x ()
--- shouldNotHave :: 'Traversal'' (Seq ('TestView' Identity)) a -> 'TestEvaluation' x ()
--- shouldNotHave :: 'Prism''     (Seq ('TestView' Identity)) a -> 'TestEvaluation' x ()
+-- shouldNotHave :: 'Getter'     (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldNotHave :: 'Fold'       (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldNotHave :: 'Iso''       (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldNotHave :: 'Lens''      (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldNotHave :: 'Traversal'' (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldNotHave :: 'Prism''     (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
 -- @
-shouldNotHave :: (HasCallStack, Show a) => Getting All (Seq (TestView Identity)) a -> TestEvaluation x ()
+shouldNotHave :: (HasCallStack, Show a) => Getting All (SomeTestViews (SpiderTimeline x) Identity) a -> TestEvaluation x ()
 shouldNotHave l = do
   vs <- askRootViews
   unless (hasn't l vs) $ do
-    expectationFailure $ "Fold was supposed to have zero targets in:\n" ++ intercalate "\n" (showTestViewHierarchy "  " vs)
+    expectationFailure $ "Fold was supposed to have zero targets in:\n" ++ intercalate "\n" (withSomeTestViews vs $ showTestViewHierarchy "  ")
 
 -- | @l \`shouldView\` t@ sets the expectation that you can see target @t@ in the view hierarchy though a 'Getter' @l@
 --
 -- @
--- shouldView ::           ('Show' a, 'Eq' a) => 'Getter'     (Seq ('TestView' Identity)) a -> a -> 'TestEvaluation' x ()
--- shouldView :: ('Data.Monoid.Monoid' m, 'Show' a, 'Eq' a) => 'Fold'       (Seq ('TestView' Identity)) m -> a -> 'TestEvaluation' x ()
--- shouldView ::           ('Show' a, 'Eq' a) => 'Iso''       (Seq ('TestView' Identity)) a -> a -> 'TestEvaluation' x ()
--- shouldView ::           ('Show' a, 'Eq' a) => 'Lens''      (Seq ('TestView' Identity)) a -> a -> 'TestEvaluation' x ()
--- shouldView :: ('Data.Monoid.Monoid' m, 'Show' a, 'Eq' a) => 'Traversal'' (Seq ('TestView' Identity)) m -> a -> 'TestEvaluation' x ()
--- shouldView :: ('Data.Monoid.Monoid' m, 'Show' a, 'Eq' a) => 'Prism''     (Seq ('TestView' Identity)) m -> a -> 'TestEvaluation' x ()
+-- shouldView ::           ('Show' a, 'Eq' a) => 'Getter'     (Seq ('TestView' (SpiderTimeline x) Identity)) a -> a -> 'TestEvaluation' x ()
+-- shouldView :: ('Data.Monoid.Monoid' m, 'Show' a, 'Eq' a) => 'Fold'       (Seq ('TestView' (SpiderTimeline x) Identity)) m -> a -> 'TestEvaluation' x ()
+-- shouldView ::           ('Show' a, 'Eq' a) => 'Iso''       (Seq ('TestView' (SpiderTimeline x) Identity)) a -> a -> 'TestEvaluation' x ()
+-- shouldView ::           ('Show' a, 'Eq' a) => 'Lens''      (Seq ('TestView' (SpiderTimeline x) Identity)) a -> a -> 'TestEvaluation' x ()
+-- shouldView :: ('Data.Monoid.Monoid' m, 'Show' a, 'Eq' a) => 'Traversal'' (Seq ('TestView' (SpiderTimeline x) Identity)) m -> a -> 'TestEvaluation' x ()
+-- shouldView :: ('Data.Monoid.Monoid' m, 'Show' a, 'Eq' a) => 'Prism''     (Seq ('TestView' (SpiderTimeline x) Identity)) m -> a -> 'TestEvaluation' x ()
 -- @
-shouldView :: (HasCallStack, Show a, Eq a) => Getting a (Seq (TestView Identity)) a -> a -> TestEvaluation x ()
+shouldView :: (HasCallStack, Show a, Eq a) => Getting a (SomeTestViews (SpiderTimeline x) Identity) a -> a -> TestEvaluation x ()
 l `shouldView` t = do
   vs <- askRootViews
   let t' = view l vs
   when (t /= t') $
-    expectationFailure $ "expected " ++ show t ++ " but got " ++ show t' ++ " in:\n" ++ intercalate "\n" (showTestViewHierarchy "  " vs)
+    expectationFailure $ "expected " ++ show t ++ " but got " ++ show t' ++ " in:\n" ++ intercalate "\n" (withSomeTestViews vs $ showTestViewHierarchy "  ")
 
 -- | @l \`shouldPreview\` t@ sets the expectation that your @y@ is the first target of the 'Fold' @l@ in the view hierarchy
 --
 -- @
--- shouldPreview :: ('Show' a, 'Eq' a) => 'Getter'     (Seq ('TestView' Identity)) a -> a -> 'TestEvaluation' x ()
--- shouldPreview :: ('Show' a, 'Eq' a) => 'Fold'       (Seq ('TestView' Identity)) a -> a -> 'TestEvaluation' x ()
--- shouldPreview :: ('Show' a, 'Eq' a) => 'Lens''      (Seq ('TestView' Identity)) a -> a -> 'TestEvaluation' x ()
--- shouldPreview :: ('Show' a, 'Eq' a) => 'Iso''       (Seq ('TestView' Identity)) a -> a -> 'TestEvaluation' x ()
--- shouldPreview :: ('Show' a, 'Eq' a) => 'Traversal'' (Seq ('TestView' Identity)) a -> a -> 'TestEvaluation' x ()
--- shouldPreview :: ('Show' a, 'Eq' a) => 'Prism''     (Seq ('TestView' Identity)) a -> a -> 'TestEvaluation' x ()
+-- shouldPreview :: ('Show' a, 'Eq' a) => 'Getter'     (Seq ('TestView' (SpiderTimeline x) Identity)) a -> a -> 'TestEvaluation' x ()
+-- shouldPreview :: ('Show' a, 'Eq' a) => 'Fold'       (Seq ('TestView' (SpiderTimeline x) Identity)) a -> a -> 'TestEvaluation' x ()
+-- shouldPreview :: ('Show' a, 'Eq' a) => 'Lens''      (Seq ('TestView' (SpiderTimeline x) Identity)) a -> a -> 'TestEvaluation' x ()
+-- shouldPreview :: ('Show' a, 'Eq' a) => 'Iso''       (Seq ('TestView' (SpiderTimeline x) Identity)) a -> a -> 'TestEvaluation' x ()
+-- shouldPreview :: ('Show' a, 'Eq' a) => 'Traversal'' (Seq ('TestView' (SpiderTimeline x) Identity)) a -> a -> 'TestEvaluation' x ()
+-- shouldPreview :: ('Show' a, 'Eq' a) => 'Prism''     (Seq ('TestView' (SpiderTimeline x) Identity)) a -> a -> 'TestEvaluation' x ()
 -- @
-shouldPreview :: (HasCallStack, Show a, Eq a) => Getting (First a) (Seq (TestView Identity)) a -> a -> TestEvaluation x ()
+shouldPreview :: (HasCallStack, Show a, Eq a) => Getting (First a) (SomeTestViews (SpiderTimeline x) Identity) a -> a -> TestEvaluation x ()
 l `shouldPreview` t = do
   vs <- askRootViews
   let t'May = preview l vs
   when (Just t /= t'May) $
-    expectationFailure $ "expected (Just) " ++ show t ++ " but got " ++ show t'May ++ " in:\n" ++ intercalate "\n" (showTestViewHierarchy "  " vs)
+    expectationFailure $ "expected (Just) " ++ show t ++ " but got " ++ show t'May ++ " in:\n" ++ intercalate "\n" (withSomeTestViews vs $ showTestViewHierarchy "  ")
 
 -- | @l \`shouldList\` ts@ sets the expectation that @ts@ is a list of the Fold @l@ targets in the view hierarchy.
 --
 -- @
--- shouldList :: ('Show' a, 'Eq' a) => s -> [a] -> 'Getter'     s a -> 'TestEvaluation' x ()
--- shouldList :: ('Show' a, 'Eq' a) => s -> [a] -> 'Fold'       s a -> 'TestEvaluation' x ()
--- shouldList :: ('Show' a, 'Eq' a) => s -> [a] -> 'Lens''      s a -> 'TestEvaluation' x ()
--- shouldList :: ('Show' a, 'Eq' a) => s -> [a] -> 'Iso''       s a -> 'TestEvaluation' x ()
--- shouldList :: ('Show' a, 'Eq' a) => s -> [a] -> 'Traversal'' s a -> 'TestEvaluation' x ()
--- shouldList :: ('Show' a, 'Eq' a) => s -> [a] -> 'Prism''     s a -> 'TestEvaluation' x ()
+-- shouldList :: ('Show' a, 'Eq' a) => s -> [a] -> 'Getter'     (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldList :: ('Show' a, 'Eq' a) => s -> [a] -> 'Fold'       (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldList :: ('Show' a, 'Eq' a) => s -> [a] -> 'Lens''      (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldList :: ('Show' a, 'Eq' a) => s -> [a] -> 'Iso''       (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldList :: ('Show' a, 'Eq' a) => s -> [a] -> 'Traversal'' (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
+-- shouldList :: ('Show' a, 'Eq' a) => s -> [a] -> 'Prism''     (Seq ('TestView' (SpiderTimeline x) Identity)) a -> 'TestEvaluation' x ()
 -- @
-shouldList :: (HasCallStack, Show a, Eq a) => Getting (Endo [a]) (Seq (TestView Identity)) a -> [a] -> TestEvaluation x ()
+shouldList :: (HasCallStack, Show a, Eq a) => Getting (Endo [a]) (SomeTestViews (SpiderTimeline x) Identity) a -> [a] -> TestEvaluation x ()
 l `shouldList` ts = do
   vs <- askRootViews
   let ts' = toListOf l vs
   when (ts /= ts') $
-    expectationFailure $ "expected " ++ show ts ++ " but got " ++ show ts' ++ " in:\n" ++ intercalate "\n" (showTestViewHierarchy "  " vs)
+    expectationFailure $ "expected " ++ show ts ++ " but got " ++ show ts' ++ " in:\n" ++ intercalate "\n" (withSomeTestViews vs $ showTestViewHierarchy "  ")

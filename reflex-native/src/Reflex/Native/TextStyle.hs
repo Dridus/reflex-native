@@ -1,10 +1,10 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
 -- |Style of displayed text.
-module Reflex.Native.TextStyle
-  ( TextStyle(..), defaultInitialTextStyle, defaultModifyTextStyle
-  ) where
+module Reflex.Native.TextStyle (TextStyle(..)) where
 
+import Data.Default (Default(def))
 import Data.Functor.Identity (Identity(..))
 import Data.Monoid ((<>))
 import GHC.Generics (Generic)
@@ -38,13 +38,13 @@ instance Rank2.Traversable TextStyle where
   traverse f (TextStyle a b) = TextStyle <$> f a <*> f b
 
 -- |Default 'TextStyle' for initial display of some text: system font, 12 point, regular weight, and black color.
-defaultInitialTextStyle :: TextStyle Identity
-defaultInitialTextStyle = TextStyle
-  { _textStyle_textColor = Identity black
-  , _textStyle_font      = Identity $ Font_System 12 Weight_Regular
-  }
+instance Default (TextStyle Identity) where
+  def = TextStyle
+    { _textStyle_textColor = Identity black
+    , _textStyle_font      = Identity $ Font_System 12 Weight_Regular
+    }
 
 -- |Default 'TextStyle' for dynamic update, where all parameters 'never' update.
-defaultModifyTextStyle :: Reflex t => TextStyle (Event t)
-defaultModifyTextStyle = Rank2.pure never
+instance Reflex t => Default (TextStyle (Event t)) where
+  def = Rank2.pure never
 

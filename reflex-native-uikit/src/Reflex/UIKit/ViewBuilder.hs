@@ -136,6 +136,9 @@ instance ViewSpace UIKitViewBuilderSpace where
   type RawTextView UIKitViewBuilderSpace = UILabel
   type RawView UIKitViewBuilderSpace = UIView
 
+instance AsView TextView UIKitViewBuilderSpace t where
+  
+
 -- |Constraints required of a monad to support a 'UIKitViewBuilderT'.
 type SupportsUIKitViewBuilder t m =
   ( Reflex t

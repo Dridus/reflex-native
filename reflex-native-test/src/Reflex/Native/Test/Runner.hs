@@ -45,7 +45,7 @@ import Reflex.TriggerEvent.Base (EventTriggerRef(..), TriggerInvocation(..))
 type TestWidget x = PostBuildT (SpiderTimeline x) (TestViewBuilderT (SpiderTimeline x) (PerformEventT (SpiderTimeline x) (SpiderHost x)))
 
 -- |Helper function used by 'testWith' and 'processEventsAndRead' to read out the current state of the view hierarchy.
-snapshotViewHierarchy :: MonadIO m => TestHolder -> m (Seq (TestView Identity))
+snapshotViewHierarchy :: MonadIO m => TestHolder t -> m (Seq (TestView t Identity))
 snapshotViewHierarchy rootHolder =
   liftIO $ traverse (traverseTestView (\ f -> fmap Identity . f <=< readTVarIO)) =<< readTVarIO rootHolder
 

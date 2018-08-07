@@ -5,6 +5,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 -- |Reexports of the various @Reflex.Native@ modules and the 'MonadNative' constraint alias for writing shorter but less precise signatures.
 module Reflex.Native
@@ -30,7 +31,10 @@ import Reflex.Native.Widget.Basic as Export
 import Reflex.Native.Widget.Customization as Export
 import Reflex.Native.ViewBuilder.Class as Export
 import Reflex.Native.ViewConfig as Export
-import Reflex.Native.ViewLayout as Export
+import Reflex.Native.ViewLayout.Class as Export
+import Reflex.Native.ViewLayout.Constraint as Export
+import Reflex.Native.ViewLayout.Fill as Export
+import Reflex.Native.ViewLayout.Linear as Export
 import Reflex.Native.ViewStyle as Export
 import Reflex.NotReady.Class as Export
 

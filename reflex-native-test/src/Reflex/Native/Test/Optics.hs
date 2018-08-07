@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeApplications #-}
--- |Convenient optics for writing tests, built up using @generic-lens@ optics.
+-- |Convenient optics for writing tests.
 module Reflex.Native.Test.Optics
   (
   -- * 'TestView' sum
@@ -11,35 +12,47 @@ module Reflex.Native.Test.Optics
   , text_text
   ) where
 
-import Control.Lens (Prism', Lens', Traversal', _Wrapped)
-import Data.Functor.Identity (Identity)
-import Data.Generics.Product (field)
-import Data.Generics.Sum (_Ctor)
+import Control.Lens (Fold, Getter, _Just, to)
+import Data.Functor.Identity (Identity, runIdentity)
 import Data.Sequence (Seq)
 import Data.Text (Text)
-import Reflex.Native.Test.Types (TestMarker, TestView(..), TestContainerView(..), TestTextView(..))
+import Reflex.Native.Test.Types
+  ( SomeTestMarker(..)
+  , TestView(..), SomeTestView(..)
+  , TestContainerView(..), SomeTestContainerView(..)
+  , TestTextView(..), SomeTestTextView(..)
+  )
 
 
 -- |Prism to select a 'TestContainerView' among the constructors of 'TestView'
-_Container :: Prism' (TestView v) (TestContainerView v)
-_Container = _Ctor @"TestView_Container"
+_Container :: Fold (SomeTestView t v) (SomeTestContainerView t v)
+_Container = to f . _Just
+  where
+    f (SomeTestView (TestView_Container cv)) = Just $ SomeTestContainerView cv
+    f _ = Nothing
 
 -- |Prism to select a 'TestMarker' among the constructors of 'TestView'
-_Marker :: Prism' (TestView v) TestMarker
-_Marker = _Ctor @"TestView_Marker"
+_Marker :: Fold (SomeTestView t v) (SomeTestMarker t)
+_Marker = to f . _Just
+  where
+    f (SomeTestView (TestView_Marker m)) = Just $ SomeTestMarker m
+    f _ = Nothing
 
 -- |Prism to select a 'TestTextView' among the constructors of 'TestView'
-_Text :: Prism' (TestView v) (TestTextView v)
-_Text = _Ctor @"TestView_Text"
+_Text :: Fold (SomeTestView t v) (SomeTestTextView v)
+_Text = to f . _Just
+  where
+    f (SomeTestView (TestView_Text tv)) = Just $ SomeTestTextView tv
+    f _ = Nothing
 
--- |Lens to a 'TestContainerView's contained views.
-container_contents :: Lens' (TestContainerView Identity) (Seq (TestView Identity))
-container_contents = field @"_testContainerView_contents" . _Wrapped
+-- |Getter projecting out the subviews of a 'SomeTestContainerView' where the inner layout type is unknown as 'SomeTestView's.
+container_contents :: Fold (SomeTestContainerView t Identity) (Seq (SomeTestView t Identity))
+container_contents = to $ \ (SomeTestContainerView cv) -> SomeTestView <$> runIdentity (_testContainerView_contents cv)
 
 -- |Traversal to visit the contents of any targeted view which happens to be a container
-subviews :: Traversal' (TestView Identity) (Seq (TestView Identity))
+subviews :: Fold (SomeTestView t Identity) (Seq (SomeTestView t Identity))
 subviews = _Container . container_contents
 
 -- |Lens to a 'TestTextView's text value.
-text_text :: Lens' (TestTextView Identity) Text
-text_text = field @"_testTextView_text" . _Wrapped
+text_text :: Getter (SomeTestTextView Identity) Text
+text_text = to $ \ (SomeTestTextView tv) -> runIdentity (_testTextView_text tv)

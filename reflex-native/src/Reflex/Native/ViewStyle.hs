@@ -1,10 +1,10 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
 -- |Style parameters for all views.
-module Reflex.Native.ViewStyle
-  ( ViewStyle(..), defaultInitialViewStyle, defaultModifyViewStyle
-  ) where
+module Reflex.Native.ViewStyle (ViewStyle(..)) where
 
+import Data.Default (Default(def))
 import Data.Functor.Identity (Identity(..))
 import GHC.Generics (Generic)
 import qualified Rank2
@@ -33,12 +33,12 @@ instance Rank2.Traversable ViewStyle where
   traverse f (ViewStyle a) = ViewStyle <$> f a
 
 -- |Default 'ViewStyle' for initial display of a view: a transparent background.
-defaultInitialViewStyle :: ViewStyle Identity
-defaultInitialViewStyle = ViewStyle
-  { _viewStyle_backgroundColor = Identity clear
-  }
+instance Default (ViewStyle Identity) where
+  def = ViewStyle
+    { _viewStyle_backgroundColor = Identity clear
+    }
 
 -- |Default 'ViewStyle' for dynamic update, where all parameters 'never' update.
-defaultModifyViewStyle :: Reflex t => ViewStyle (Event t)
-defaultModifyViewStyle = Rank2.pure never
+instance Reflex t => Default (ViewStyle (Event t)) where
+  def = Rank2.pure never
 

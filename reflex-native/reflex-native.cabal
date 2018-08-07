@@ -17,6 +17,7 @@ library
       Reflex.Native
       Reflex.Native.AdjustingBuilder
       Reflex.Native.Color
+      Reflex.Native.ContainerConfig
       Reflex.Native.Font
       Reflex.Native.Geometry
       Reflex.Native.Gesture
@@ -26,7 +27,11 @@ library
       Reflex.Native.Widget.Customization
       Reflex.Native.ViewBuilder.Class
       Reflex.Native.ViewConfig
-      Reflex.Native.ViewLayout
+      Reflex.Native.ViewLayout.Class
+      Reflex.Native.ViewLayout.Constraint
+      Reflex.Native.ViewLayout.Explicit
+      Reflex.Native.ViewLayout.Fill
+      Reflex.Native.ViewLayout.Linear
       Reflex.Native.ViewStyle
   hs-source-dirs: src
   ghc-options:
@@ -35,9 +40,11 @@ library
   build-depends:
       base
     , containers == 0.5.*
+    , data-default >= 0.5 && < 0.8
     , dependent-map == 0.2.*
     , dependent-sum >= 0.3 && < 0.5
     , generic-lens == 1.0.*
+    , kiwi-dsl == 0.1.*
     , lens == 4.16.*
     , mtl >= 2.1 && < 2.3
     , rank2classes == 1.1.*
