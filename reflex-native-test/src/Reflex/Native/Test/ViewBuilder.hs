@@ -46,7 +46,6 @@ import Control.Monad.Primitive (PrimMonad(type PrimState, primitive))
 import Control.Monad.Ref (MonadAtomicRef(atomicModifyRef), MonadRef(type Ref, newRef, readRef, writeRef, modifyRef, modifyRef'))
 import Control.Monad.Reader (ReaderT(..), ask, asks)
 import Control.Monad.Trans.Class (MonadTrans(lift))
-import Data.Align.Key (alignWithKey)
 import Data.Dependent.Sum (DSum)
 import Data.Foldable (for_, traverse_)
 import Data.Functor (Functor(fmap), (<$), void)
@@ -58,16 +57,12 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IORef (IORef)
 import Data.Key (forWithKey_)
-import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Monoid ((<>))
 import Data.Proxy (Proxy(..))
 import Data.Sequence (Seq, ViewL((:<)), (|>), (<|), (><))
 import qualified Data.Sequence as Seq
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Text (Text, unpack)
-import Data.These (These(This, That, These))
 import qualified Rank2
 import Reflex
   ( Adjustable(runWithReplace, traverseDMapWithKeyWithAdjust, traverseIntMapWithKeyWithAdjust, traverseDMapWithKeyWithAdjustWithMove)
@@ -83,30 +78,27 @@ import Reflex.Host.Class (MonadReflexCreateTrigger(newEventWithTrigger, newFanEv
 import Reflex.Native.AdjustingBuilder (AdjustingBuilderConfig(..))
 import qualified Reflex.Native.AdjustingBuilder as AdjustingBuilder
 import Reflex.Native.ContainerConfig (ContainerConfig(..))
-import Reflex.Native.Geometry (Axis, KnownAxis(axisVal))
-import Reflex.Native.Gesture (GestureSpec(..))
+import Reflex.Native.Geometry (KnownAxis)
+import Reflex.Native.Gesture (GestureData, GestureSpec(..), GestureState)
 import Reflex.Native.Test.Types
-  ( TestHolder, TestViewSpace, TestView(..), TestViewCommon(..), TestViewLayout(..), TestTextView(..), TestContainerViewLayout(..), TestContainerView(..)
+  ( TestHolder, TestViewSpace, TestViewSpaceLayout(makeTestContainerViewLayout)
+  , TestView(..), TestViewCommon(..), TestViewLayout(..), TestTextView(..), TestContainerViewLayout(..), TestContainerView(..)
   , TestMarker(..), newTestIdentity, testView_common, tshowTestMarkerIdentity
   )
 import Reflex.Native.TextConfig (TextConfig(..))
 import Reflex.Native.ViewBuilder.Class
-  ( ViewBuilder
-    ( type ViewBuilderLayout, type ViewBuilderForLayout, type ViewBuilderSpace, type ViewLayoutSupport
-    , buildTextView, buildContainerView, placeRawView, wrapRawView, recognizeGesture
-    )
+  ( ViewBuilder(buildTextView, buildContainerView, placeRawView, wrapRawView, recognizeGesture), ViewBuilderForLayout, ViewBuilderSpace
   , ContainerView(..), TextView(..), View(..)
   )
 import Reflex.Native.ViewConfig (RawViewConfig(..), ViewConfig(..))
-import Reflex.Native.ViewLayout.Class (ViewLayout(type ContainerLayout, type ContentLayout))
+import Reflex.Native.ViewLayout.Class (ViewLayout(type ContentLayout))
 import Reflex.Native.ViewLayout.Constraint
   ( ConstraintLayout, ConstraintLayoutBuilder(type ViewConstraintId, addConstraint, incrementalConstraints, removeConstraint), ViewConstraint
   )
 import Reflex.Native.ViewLayout.Explicit (ExplicitLayout, ContentLayout(..))
 import Reflex.Native.ViewLayout.Fill (FillLayout)
-import Reflex.Native.ViewLayout.Linear (LinearLayout, ContainerLayout(..))
+import Reflex.Native.ViewLayout.Linear (LinearLayout)
 import Reflex.NotReady.Class (NotReady(notReady, notReadyUntil))
-import Reflex.Patch.Class (applyAlways)
 import Reflex.Patch.Map (PatchMap(..))
 import Reflex.PerformEvent.Class (PerformEvent(type Performable, performEvent, performEvent_), performEventAsync)
 import Reflex.PostBuild.Class (PostBuild(getPostBuild))
@@ -132,22 +124,22 @@ data BuildFrame = BuildFrame
 --
 -- The parent view varies when building subviews ala 'buildContainerView' but the build frame does not, while conversely the build frame varies but the parent
 -- view might not when performing 'Adjustable' methods or similar.
-data Env layout t = Env
-  { _env_views :: TestHolder layout t
+data Env t layout = Env
+  { _env_views :: TestHolder t layout
   -- ^The current holder to append views to
-  , _env_layout :: EnvLayout layout t
+  , _env_layout :: EnvLayout t layout
   , _env_frame :: BuildFrame
   -- ^The current dynamic ('Adjustable') frame that the builder is running in
   }
 
-data EnvLayout layout t where
+data EnvLayout t layout where
   EnvLayout_Constraint ::
-    { _envLayout_constraint_constraints :: TVar (IntMap (ViewConstraint TestViewSpace t))
+    { _envLayout_constraint_constraints :: TVar (IntMap (ViewConstraint t TestViewSpace))
     , _envLayout_constraint_nextConstraintId :: TVar Int
-    } -> EnvLayout ConstraintLayout t
-  EnvLayout_Explicit :: EnvLayout ExplicitLayout t
-  EnvLayout_Fill :: EnvLayout FillLayout t
-  EnvLayout_Linear :: EnvLayout (LinearLayout axis) t
+    } -> EnvLayout t ConstraintLayout
+  EnvLayout_Explicit :: EnvLayout t ExplicitLayout
+  EnvLayout_Fill :: EnvLayout t FillLayout
+  EnvLayout_Linear :: EnvLayout t (LinearLayout axis)
 
 -- |Constraints required of a monad to support a 'TestViewBuilderT'.
 type SupportsTestViewBuilder t m =
@@ -165,34 +157,34 @@ type SupportsTestViewBuilder t m =
 type TestRequesterT t m = RequesterT t IO Identity (TriggerEventT t m)
 
 -- |'ViewBuilder' monad for building test view hierarchies.
-newtype TestViewBuilderT layout t m a = TestViewBuilderT
-  { unTestViewBuilderT :: ReaderT (Env layout t) (TestRequesterT t m) a
+newtype TestViewBuilderT t layout m a = TestViewBuilderT
+  { unTestViewBuilderT :: ReaderT (Env t layout) (TestRequesterT t m) a
   }
 
-deriving instance Functor m => Functor (TestViewBuilderT layout t m)
-deriving instance Monad m => Applicative (TestViewBuilderT layout t m)
-deriving instance Monad m => Monad (TestViewBuilderT layout t m)
-deriving instance MonadFix m => MonadFix (TestViewBuilderT layout t m)
-deriving instance MonadIO m => MonadIO (TestViewBuilderT layout t m)
-deriving instance MonadException m => MonadException (TestViewBuilderT layout t m)
-deriving instance MonadAsyncException m => MonadAsyncException (TestViewBuilderT layout t m)
+deriving instance Functor m => Functor (TestViewBuilderT t layout m)
+deriving instance Monad m => Applicative (TestViewBuilderT t layout m)
+deriving instance Monad m => Monad (TestViewBuilderT t layout m)
+deriving instance MonadFix m => MonadFix (TestViewBuilderT t layout m)
+deriving instance MonadIO m => MonadIO (TestViewBuilderT t layout m)
+deriving instance MonadException m => MonadException (TestViewBuilderT t layout m)
+deriving instance MonadAsyncException m => MonadAsyncException (TestViewBuilderT t layout m)
 
 -- |Pass through 'PrimMonad'.
-instance PrimMonad m => PrimMonad (TestViewBuilderT layout t m) where
-  type PrimState (TestViewBuilderT layout t m) = PrimState m
+instance PrimMonad m => PrimMonad (TestViewBuilderT t layout m) where
+  type PrimState (TestViewBuilderT t layout m) = PrimState m
   primitive = lift . primitive
 
 -- |Straightforward lift.
-instance MonadTrans (TestViewBuilderT layout t) where
+instance MonadTrans (TestViewBuilderT t layout) where
   lift = TestViewBuilderT . lift . lift . lift
 
 -- |Pass through 'MonadAtomicRef'.
-instance MonadAtomicRef m => MonadAtomicRef (TestViewBuilderT layout t m) where
+instance MonadAtomicRef m => MonadAtomicRef (TestViewBuilderT t layout m) where
   {-# INLINABLE atomicModifyRef #-}
   atomicModifyRef r = lift . atomicModifyRef r
 
 -- |Pass through 'MonadHold'.
-instance MonadHold t m => MonadHold t (TestViewBuilderT layout t m) where
+instance MonadHold t m => MonadHold t (TestViewBuilderT t layout m) where
   {-# INLINABLE hold #-}
   hold v0 v' = lift $ hold v0 v'
   {-# INLINABLE holdDyn #-}
@@ -205,8 +197,8 @@ instance MonadHold t m => MonadHold t (TestViewBuilderT layout t m) where
   headE = lift . headE
 
 -- |Pass through 'MonadRef'.
-instance MonadRef m => MonadRef (TestViewBuilderT layout t m) where
-  type Ref (TestViewBuilderT layout t m) = Ref m
+instance MonadRef m => MonadRef (TestViewBuilderT t layout m) where
+  type Ref (TestViewBuilderT t layout m) = Ref m
   {-# INLINABLE newRef #-}
   newRef = lift . newRef
   {-# INLINABLE readRef #-}
@@ -219,39 +211,39 @@ instance MonadRef m => MonadRef (TestViewBuilderT layout t m) where
   modifyRef' r = lift . modifyRef' r
 
 -- |Pass through 'MonadReflexCreateTrigger'.
-instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (TestViewBuilderT layout t m) where
+instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (TestViewBuilderT t layout m) where
   {-# INLINABLE newEventWithTrigger #-}
   newEventWithTrigger = lift . newEventWithTrigger
   {-# INLINABLE newFanEventWithTrigger #-}
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
 -- |Pass through 'MonadSample'.
-instance MonadSample t m => MonadSample t (TestViewBuilderT layout t m) where
+instance MonadSample t m => MonadSample t (TestViewBuilderT t layout m) where
   {-# INLINABLE sample #-}
   sample = lift . sample
 
 -- |Pass through 'PerformEvent'.
-instance PerformEvent t m => PerformEvent t (TestViewBuilderT layout t m) where
-  type Performable (TestViewBuilderT layout t m) = Performable m
+instance PerformEvent t m => PerformEvent t (TestViewBuilderT t layout m) where
+  type Performable (TestViewBuilderT t layout m) = Performable m
   {-# INLINABLE performEvent_ #-}
   performEvent_ e = lift $ performEvent_ e
   {-# INLINABLE performEvent #-}
   performEvent e = lift $ performEvent e
 
 -- |Pass through 'PostBuild'.
-instance PostBuild t m => PostBuild t (TestViewBuilderT layout t m) where
+instance PostBuild t m => PostBuild t (TestViewBuilderT t layout m) where
   {-# INLINABLE getPostBuild #-}
   getPostBuild = lift getPostBuild
 
 -- |Pass through 'Requester'.
-instance (Reflex t, Monad m) => Requester t (TestViewBuilderT layout t m) where
-  type Request (TestViewBuilderT layout t m) = IO
-  type Response (TestViewBuilderT layout t m) = Identity
+instance (Reflex t, Monad m) => Requester t (TestViewBuilderT t layout m) where
+  type Request (TestViewBuilderT t layout m) = IO
+  type Response (TestViewBuilderT t layout m) = Identity
   requesting = TestViewBuilderT . lift . requesting
   requesting_ = TestViewBuilderT . lift . requesting_
 
 -- |Pass through 'TriggerEvent'.
-instance (Monad m, MonadRef m, Ref m ~ Ref IO, MonadReflexCreateTrigger t m) => TriggerEvent t (TestViewBuilderT layout t m) where
+instance (Monad m, MonadRef m, Ref m ~ Ref IO, MonadReflexCreateTrigger t m) => TriggerEvent t (TestViewBuilderT t layout m) where
   {-# INLINABLE newTriggerEvent #-}
   newTriggerEvent = TestViewBuilderT . lift . lift $ newTriggerEvent
   {-# INLINABLE newTriggerEventWithOnComplete #-}
@@ -267,9 +259,9 @@ reportFault t = liftIO . fail . unpack $ "fault detected in test builder: " <> t
 -- |Create a 'TestViewCommon' based on a 'ViewConfig' with the initial values and request that the TVars get updated whenever the view config modification
 -- events fire.
 makeTestViewCommon
-  :: (MonadIO m, Requester t m, MonadIO (Request m), TestViewBuilderLayoutSupport t m)
-  => ViewConfig layout t -> m (TestViewCommon layout TVar)
-makeTestViewCommon (ViewConfig {..}) = do
+  :: (MonadIO m, Requester t m, MonadIO (Request m))
+  => (ContentLayout t layout -> m (TestViewLayout layout TVar)) -> ViewConfig t layout -> m (TestViewCommon layout TVar)
+makeTestViewCommon makeTestViewLayout (ViewConfig {..}) = do
   _testViewCommon_identity <- newTestIdentity
   _testViewCommon_style <- Rank2.traverse (liftIO . newTVarIO . runIdentity) _viewConfig_initialStyle
   _testViewCommon_accessibilityLabel <- liftIO $ newTVarIO _viewConfig_initialAccessibilityLabel
@@ -282,19 +274,24 @@ makeTestViewCommon (ViewConfig {..}) = do
   for_ _viewConfig_setAccessibilityLabel $ requesting_ . fmap (liftIO . atomically . writeTVar _testViewCommon_accessibilityLabel)
   pure tvc
 
-class ViewBuilder t m => TestViewBuilderLayoutSupport t m where
-  makeTestViewLayout :: ContentLayout layout t -> m (TestViewLayout layout TVar)
-  makeContainerLayout :: ContainerLayout layout t -> m (EnvLayout layout t, TestContainerViewLayout layout t TVar)
+type instance ViewBuilderForLayout layout' (TestViewBuilderT t layout m) = TestViewBuilderT t layout' m
+type instance ViewBuilderSpace (TestViewBuilderT t layout m) = TestViewSpace
 
-instance SupportsTestViewBuilder t m => TestViewBuilderLayoutSupport ConstraintLayout (TestViewBuilderT ConstraintLayout t m) where
-  makeTestViewLayout _ = pure TestViewLayout_Constraint
-  makeContainerLayout _ = do
-    _envLayout_constraint_constraints <- liftIO $ newTVarIO mempty
-    _envLayout_constraint_nextConstraintId <- liftIO $ newTVarIO (0 :: Int)
-    pure (EnvLayout_Constraint {..}, TestContainerViewLayout_Constraint _envLayout_constraint_constraints)
+instance SupportsTestViewBuilder t m => ViewBuilder t ConstraintLayout (TestViewBuilderT t ConstraintLayout m) where
+  buildTextView = buildTextViewImpl makeConstraintTestViewLayout
+  buildContainerView = buildContainerViewImpl makeConstraintTestViewLayout
+  placeRawView = placeRawViewImpl makeConstraintTestViewLayout
+  wrapRawView = wrapRawViewImpl
+  recognizeGesture = recognizeGestureImpl
 
-instance SupportsTestViewBuilder t m => ConstraintLayoutBuilder TestViewSpace t (TestViewBuilderT ConstraintLayout t m) where
-  newtype ViewConstraintId (TestViewBuilderT ConstraintLayout t m) = ViewConstraintId_Test IntMap.Key deriving (Eq, Ord)
+makeConstraintTestViewLayout
+  :: SupportsTestViewBuilder t m
+  => ContentLayout t ConstraintLayout
+  -> TestViewBuilderT t layout m (TestViewLayout ConstraintLayout TVar)
+makeConstraintTestViewLayout _ = pure TestViewLayout_Constraint
+
+instance SupportsTestViewBuilder t m => ConstraintLayoutBuilder t TestViewSpace (TestViewBuilderT t ConstraintLayout m) where
+  newtype ViewConstraintId (TestViewBuilderT t ConstraintLayout m) = ViewConstraintId_Test IntMap.Key deriving (Eq, Ord)
 
   addConstraint c = do
     EnvLayout_Constraint {..} <- TestViewBuilderT $ asks _env_layout
@@ -321,7 +318,6 @@ instance SupportsTestViewBuilder t m => ConstraintLayoutBuilder TestViewSpace t 
     requesting_ . ffor (updatedIncremental incr) $ \ (PatchMap csPatch) -> do
       liftIO . atomically $ do
         keyMap <- readTVar keyMapTv
-        csMap <- readTVar _envLayout_constraint_constraints
         forWithKey_ csPatch $ \ k -> \ case
           Nothing -> do
             for_ (Map.lookup k keyMap) $ \ i -> do
@@ -342,31 +338,56 @@ instance SupportsTestViewBuilder t m => ConstraintLayoutBuilder TestViewSpace t 
     liftIO . atomically . modifyTVar' _envLayout_constraint_constraints $ IntMap.delete i
     pure ()
 
-instance SupportsTestViewBuilder t m => TestViewBuilderLayoutSupport t (TestViewBuilderT ExplicitLayout t m) where
-  makeTestViewLayout (ContentLayout_Explicit {..}) = do
-    rectTv <- liftIO $ newTVarIO _contentLayout_explicit_initialRect
-    for_ _contentLayout_explicit_setRect $ requesting_ . fmap (liftIO . atomically . writeTVar rectTv)
-    pure $ TestViewLayout_Explicit rectTv
-  makeContainerLayout _ = pure (EnvLayout_Explicit, TestContainerViewLayout_Explicit)
+instance SupportsTestViewBuilder t m => ViewBuilder t ExplicitLayout (TestViewBuilderT t ExplicitLayout m) where
+  buildTextView = buildTextViewImpl makeExplicitTestViewLayout
+  buildContainerView = buildContainerViewImpl makeExplicitTestViewLayout
+  placeRawView = placeRawViewImpl makeExplicitTestViewLayout
+  wrapRawView = wrapRawViewImpl
+  recognizeGesture = recognizeGestureImpl
 
-instance Applicative m => TestViewBuilderLayoutSupport t (TestViewBuilderT FillLayout t m) where
-  makeTestViewLayout _ = pure TestViewLayout_Fill
-  makeContainerLayout _ = pure (EnvLayout_Fill, TestContainerViewLayout_Fill)
+makeExplicitTestViewLayout
+  :: SupportsTestViewBuilder t m
+  => ContentLayout t ExplicitLayout
+  -> TestViewBuilderT t layout m (TestViewLayout ExplicitLayout TVar)
+makeExplicitTestViewLayout (ContentLayout_Explicit {..}) = do
+  rectTv <- liftIO $ newTVarIO _contentLayout_explicit_initialRect
+  for_ _contentLayout_explicit_setRect $ requesting_ . fmap (liftIO . atomically . writeTVar rectTv)
+  pure $ TestViewLayout_Explicit rectTv
 
-instance forall (axis :: Axis) t m. KnownAxis axis => TestViewBuilderLayoutSupport t (TestViewBuilderT (LinearLayout axis) t m) where
-  makeTestViewLayout _ = pure $ TestViewLayout_Linear (Proxy @axis)
-  makeContainerLayout (ContainerLayout_Linear {..}) =
-    pure (EnvLayout_Linear, TestContainerViewLayout_Linear (Proxy @axis) _containerLayout_linear_spacingBetween)
+instance SupportsTestViewBuilder t m => ViewBuilder t FillLayout (TestViewBuilderT t FillLayout m) where
+  buildTextView = buildTextViewImpl makeFillTestViewLayout
+  buildContainerView = buildContainerViewImpl makeFillTestViewLayout
+  placeRawView = placeRawViewImpl makeFillTestViewLayout
+  wrapRawView = wrapRawViewImpl
+  recognizeGesture = recognizeGestureImpl
 
--- |@ViewBuilder@ for testing.
-instance (SupportsTestViewBuilder t m, TestViewBuilderLayoutSupport t (TestViewBuilderT layout t m)) => ViewBuilder t (TestViewBuilderT layout t m) where
-  type ViewBuilderLayout (TestViewBuilderT layout t m) = layout
-  type ViewBuilderForLayout layout' (TestViewBuilderT layout t m) = TestViewBuilderT layout' t m
-  type ViewBuilderSpace (TestViewBuilderT layout t m) = TestViewSpace
-  type ViewLayoutSupport layout (TestViewBuilderT layout t m) = TestViewBuilderLayoutSupport t (TestViewBuilderT layout t m)
+makeFillTestViewLayout
+  :: SupportsTestViewBuilder t m
+  => ContentLayout t FillLayout
+  -> TestViewBuilderT t layout m (TestViewLayout FillLayout TVar)
+makeFillTestViewLayout _ = pure TestViewLayout_Fill
 
-  buildTextView (TextConfig {..}) = do
-    _testTextView_common <- makeTestViewCommon _textConfig_viewConfig
+instance (KnownAxis axis, SupportsTestViewBuilder t m) => ViewBuilder t (LinearLayout axis) (TestViewBuilderT t (LinearLayout axis) m) where
+  buildTextView = buildTextViewImpl makeLinearTestViewLayout
+  buildContainerView = buildContainerViewImpl makeLinearTestViewLayout
+  placeRawView = placeRawViewImpl makeLinearTestViewLayout
+  wrapRawView = wrapRawViewImpl
+  recognizeGesture = recognizeGestureImpl
+
+makeLinearTestViewLayout
+  :: forall t layout axis m. (SupportsTestViewBuilder t m, KnownAxis axis)
+  => ContentLayout t (LinearLayout axis)
+  -> TestViewBuilderT t layout m (TestViewLayout (LinearLayout axis) TVar)
+makeLinearTestViewLayout _ = pure $ TestViewLayout_Linear (Proxy @axis)
+
+buildTextViewImpl
+  :: SupportsTestViewBuilder t m
+  => (ContentLayout t layout -> TestViewBuilderT t layout m (TestViewLayout layout TVar))
+  -> TextConfig t layout
+  -> TestViewBuilderT t layout m (TextView t TestViewSpace layout)
+buildTextViewImpl makeTestViewLayout =
+  \ (TextConfig {..}) -> do
+    _testTextView_common <- makeTestViewCommon makeTestViewLayout _textConfig_viewConfig
     _testTextView_text <- liftIO . newTVarIO $ _textConfig_initialText
     _testTextView_style <- Rank2.traverse (liftIO . newTVarIO . runIdentity) _textConfig_initialStyle
     for_ _textConfig_modifyStyle $ \ ts' ->
@@ -380,10 +401,28 @@ instance (SupportsTestViewBuilder t m, TestViewBuilderLayoutSupport t (TestViewB
 
     pure $ TextView view
 
-  buildContainerView (ContainerConfig {..}) child = do
-    _testContainerView_common <- makeTestViewCommon _containerConfig_viewConfig
-    (_env_layout, _testContainerView_layout) <- makeContainerLayout _containerConfig_layout
+buildContainerViewImpl
+  :: (SupportsTestViewBuilder t m, TestViewSpaceLayout t layout')
+  => (ContentLayout t layout -> TestViewBuilderT t layout m (TestViewLayout layout TVar))
+  -> ContainerConfig t layout layout'
+  -> TestViewBuilderT t layout' m a
+  -> TestViewBuilderT t layout m (a, ContainerView t TestViewSpace layout layout')
+buildContainerViewImpl makeTestViewLayout =
+  \ (ContainerConfig {..}) child -> do
+    _testContainerView_common <- makeTestViewCommon makeTestViewLayout _containerConfig_viewConfig
+    _testContainerView_layout <- makeTestContainerViewLayout _containerConfig_layout
     _testContainerView_contents <- liftIO $ newTVarIO Seq.empty
+
+    _env_layout <- case _testContainerView_layout of
+      TestContainerViewLayout_Constraint _envLayout_constraint_constraints -> do
+        _envLayout_constraint_nextConstraintId <- liftIO $ newTVarIO 0
+        pure $ EnvLayout_Constraint {..}
+      TestContainerViewLayout_Explicit ->
+        pure EnvLayout_Explicit
+      TestContainerViewLayout_Fill ->
+        pure EnvLayout_Fill
+      TestContainerViewLayout_Linear _ _ ->
+        pure $ EnvLayout_Linear
 
     parentEnv <- TestViewBuilderT ask
     let childEnv = parentEnv { _env_views = _testContainerView_contents, _env_layout }
@@ -395,24 +434,41 @@ instance (SupportsTestViewBuilder t m, TestViewBuilderLayoutSupport t (TestViewB
 
     pure (result, ContainerView view)
 
-  placeRawView contentLayout v = do
+placeRawViewImpl
+  :: SupportsTestViewBuilder t m
+  => (ContentLayout t layout -> TestViewBuilderT t layout m (TestViewLayout layout TVar))
+  -> ContentLayout t layout
+  -> TestView t layout TVar
+  -> TestViewBuilderT t layout m ()
+placeRawViewImpl makeTestViewLayout =
+  \ contentLayout v -> do
     testViewLayout <- makeTestViewLayout contentLayout
     append $ over testView_common (set (field @"_testViewCommon_layout") testViewLayout) v
 
-  wrapRawView view (RawViewConfig {..}) = do
-    for_ (preview testView_common view) $ \ (TestViewCommon {..}) -> do
-      for_ _rawViewConfig_modifyStyle $ \ vs' ->
-        void $ Rank2.traverse
-          (\ (Pair tv ev) -> fmap Const . requesting_ . ffor ev $ \ a -> liftIO . atomically . writeTVar tv $! a)
-          (Rank2.liftA2 Pair _testViewCommon_style vs')
-      for_ _rawViewConfig_setAccessibilityLabel $ requesting_ . fmap (liftIO . atomically . writeTVar _testViewCommon_accessibilityLabel)
-    pure $ View view
+wrapRawViewImpl
+  :: SupportsTestViewBuilder t m
+  => TestView t layout TVar
+  -> RawViewConfig t
+  -> TestViewBuilderT t layout m (View t TestViewSpace layout)
+wrapRawViewImpl view (RawViewConfig {..}) = do
+  for_ (preview testView_common view) $ \ (TestViewCommon {..}) -> do
+    for_ _rawViewConfig_modifyStyle $ \ vs' ->
+      void $ Rank2.traverse
+        (\ (Pair tv ev) -> fmap Const . requesting_ . ffor ev $ \ a -> liftIO . atomically . writeTVar tv $! a)
+        (Rank2.liftA2 Pair _testViewCommon_style vs')
+    for_ _rawViewConfig_setAccessibilityLabel $ requesting_ . fmap (liftIO . atomically . writeTVar _testViewCommon_accessibilityLabel)
+  pure $ View view
 
-  recognizeGesture (View _) = \ case
-    GestureSpec_Pan -> pure never -- FIXME
+recognizeGestureImpl
+  :: SupportsTestViewBuilder t m
+  => View t TestViewSpace layout
+  -> GestureSpec gs
+  -> TestViewBuilderT t layout m (Event t (GestureState (GestureData gs)))
+recognizeGestureImpl (View _) = \ case
+  GestureSpec_Pan -> pure never -- FIXME
 
 -- |Keep track of the readiness state of view hierarchies when testing.
-instance SupportsTestViewBuilder t m => NotReady t (TestViewBuilderT layout t m) where
+instance SupportsTestViewBuilder t m => NotReady t (TestViewBuilderT t layout m) where
   notReadyUntil trigger = do
     notReady
     first <- headE trigger
@@ -442,7 +498,7 @@ becameReadyIn (BuildFrame {..}) = do
       else _buildFrame_commitAction
 
 -- |"Reflex.Native.AdjustingBuilder" configured for testing.
-instance SupportsTestViewBuilder t m => Adjustable t (TestViewBuilderT layout t m) where
+instance SupportsTestViewBuilder t m => Adjustable t (TestViewBuilderT t layout m) where
   runWithReplace = AdjustingBuilder.runWithReplaceImpl testViewBuilderConfig
   traverseIntMapWithKeyWithAdjust = AdjustingBuilder.traverseIntMapWithKeyWithAdjustImpl testViewBuilderConfig
   traverseDMapWithKeyWithAdjust = AdjustingBuilder.traverseDMapWithKeyWithAdjustImpl testViewBuilderConfig
@@ -451,15 +507,19 @@ instance SupportsTestViewBuilder t m => Adjustable t (TestViewBuilderT layout t 
 -- |'AdjustingBuilderConfig' for manipulating the test view hierarchy.
 testViewBuilderConfig
   :: MonadIO m
-  => AdjustingBuilderConfig (TestViewBuilderT layout t m) (TestRequesterT t m) IO (TestMarker layout t) (TestHolder layout t) ()
-testViewBuilderConfig = AdjustingBuilderConfig {..}
+  => EnvLayout t layout
+  -> AdjustingBuilderConfig (TestViewBuilderT t layout m) (TestRequesterT t m) IO (TestMarker t layout) (TestHolder t layout) ()
+testViewBuilderConfig _env_layout = AdjustingBuilderConfig {..}
   where
     _adjustingBuilderConfig_liftBase = liftIO
     _adjustingBuilderConfig_lift = TestViewBuilderT . lift
     _adjustingBuilderConfig_newSlotAddendum = pure ()
     _adjustingBuilderConfig_becameReadyInParent = becameReadyIn <$> TestViewBuilderT (asks _env_frame)
     _adjustingBuilderConfig_newHolder = liftIO $ newTVarIO Seq.empty
-    _adjustingBuilderConfig_newMarker = liftIO $ TestMarker <$> newTestIdentity <*> newTVarIO Nothing
+    _adjustingBuilderConfig_newMarker = liftIO $ do 
+      _testMarker_identity <- newTestIdentity
+      _testMarker_parent <- newTVarIO Nothing
+      TestMarker <$> newTestIdentity <*> newTVarIO Nothing
 
     _adjustingBuilderConfig_runChild _env_views () _buildFrame_commitAction child = do
       _buildFrame_unreadyChildren <- liftIO $ newTVarIO 0
@@ -493,47 +553,47 @@ testViewBuilderConfig = AdjustingBuilderConfig {..}
           beforeAsView = TestView_Marker before
       either (\ t -> reportFault (faultPrefix <> t)) pure <=<
         atomically . runExceptT $ do
-          parentTv <- maybe (throwError "reference marker has no parent") pure =<< (liftBase . readTVar . _testMarker_parent) before
-          oldParentTvMay <- liftBase . readTVar . _testMarker_parent $ m
-          for_ oldParentTvMay $ \ oldParentTv -> liftBase $ modifyTVar' oldParentTv (Seq.filter (/= mAsView))
-          subviews <- liftBase $ readTVar parentTv
+          parentHolder <- maybe (throwError "reference marker has no parent") pure =<< (liftBase . readTVar . _testMarker_parent) before
+          subviews <- liftBase $ readTVar parentHolder
           case Seq.spanl (/= beforeAsView) subviews of
             (p, s)
               | Seq.null s -> throwError "reference marker not in parent's subviews"
-              | otherwise  -> liftBase $ writeTVar parentTv $! (p |> mAsView) >< s
-          liftBase $ reparentView (Just parentTv) mAsView
+              | otherwise  -> liftBase $ writeTVar parentHolder $! (p |> mAsView) >< s
+          liftBase $ reparentView (Just parentHolder) mAsView
 
     _adjustingBuilderConfig_removeMarker m = do
       let faultPrefix = "removeMarker (" <> tshowTestMarkerIdentity m <> "): "
           mAsView = TestView_Marker m
       either (\ t -> reportFault (faultPrefix <> t)) pure <=<
         atomically . runExceptT $ do
-          oldParentTvMay <- liftBase . readTVar . _testMarker_parent $ m
-          for_ oldParentTvMay $ \ oldParentTv -> liftBase $ modifyTVar' oldParentTv (Seq.filter (/= mAsView))
           liftBase $ reparentView Nothing mAsView
 
 -- |Append a 'TestView' to the current build parent.
-append :: MonadIO m => TestView layout t TVar -> TestViewBuilderT layout t m ()
+append :: MonadIO m => TestView t layout TVar -> TestViewBuilderT t layout m ()
 append v = do
   Env { _env_views } <- TestViewBuilderT ask
   liftIO . atomically $ modifyTVar' _env_views (|> v)
 
 -- |Move all views in the given sequence to a new parent by changing any parent pointers each has using 'reparentView'.
-reparentViews :: Maybe (TestHolder layout t) -> Seq (TestView layout t TVar) -> STM ()
+reparentViews :: Maybe (TestHolder t layout) -> Seq (TestView t layout TVar) -> STM ()
 reparentViews newParent = traverse_ (reparentView newParent)
 
 -- |Move a view to a new parent by changing its parent pointer, if it has one.
-reparentView :: Maybe (TestHolder layout t) -> TestView layout t TVar -> STM ()
-reparentView parent = \ case
-  TestView_Marker (TestMarker {..}) ->
-    writeTVar _testMarker_parent parent
-  _ -> pure ()
+reparentView :: Maybe (TestHolder t layout) -> TestView t layout TVar -> STM ()
+reparentView newParentMay v =
+  case v of
+    TestView_Marker (TestMarker {..}) -> do
+      readTVar _testMarker_parent >>= \ case
+        Just parentTv -> modifyTVar' parentTv $ Seq.filter (/= v)
+        _             -> pure ()
+      writeTVar _testMarker_parent newParentMay
+    _ -> pure ()
 
 -- |Function which implements '_adjustingBuilderConfig_collectViewsBetween', '_adjustingBuilderConfig_deleteViewsBetween', and
 -- '_adjustingBuilderConfig_replaceBetweenMarkersWithHolder'. Finds two markers in their parent view, reporting faults if they don't have a parent or they're
 -- different, and collects up the views in between them and replaces them with the result of the given action. Returns an empty holder in any error case, but
 -- reports faults via @reportFault@ to stdout.
-replaceBetweenWith :: STM (Seq (TestView layout t TVar)) -> Text -> TestMarker layout t -> TestMarker layout t -> IO (TestHolder layout t)
+replaceBetweenWith :: STM (Seq (TestView t layout TVar)) -> Text -> TestMarker t layout -> TestMarker t layout -> IO (TestHolder t layout)
 replaceBetweenWith viewAction function start end = do
   let faultPrefix = function <> " (" <> tshowTestMarkerIdentity start <> ") (" <> tshowTestMarkerIdentity end <> "): "
   either (\ t -> reportFault (faultPrefix <> t) *> newTVarIO Seq.empty) pure <=<
@@ -574,15 +634,15 @@ runTestViewBuilderT
      , MonadIO m
      , PerformEvent t m, MonadIO (Performable m)
      )
-  => TestViewBuilderT layout t m a
+  => TestViewBuilderT t layout m a
   -- ^The 'TestViewBuilderT' action to run.
-  -> TestHolder layout t
+  -> TestHolder t layout
   -- ^Where the builder should add new views, typically an empty holder.
   -> IO ()
   -- ^The root frame commit action.
   -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -- ^A channel where asynchronous event triggers will be enqueued by the builder. Usually processed synchronously in the test running code.
-  -> m (a, Env layout t)
+  -> m (a, Env t layout)
 runTestViewBuilderT (TestViewBuilderT ma) _env_views _buildFrame_commitAction eventChan = do
   _buildFrame_unreadyChildren <- liftIO $ newTVarIO 0
   _buildFrame_hasCommitted <- liftIO $ newTVarIO False

@@ -86,106 +86,106 @@ instance Monoid (Customization t a) where
   mappend = (Semigroup.<>)
 
 -- |Set the background color of any view to a static color.
-backgroundColor :: HasViewConfig layout t s => Color -> Customization t s
+backgroundColor :: HasViewConfig t layout s => Color -> Customization t s
 backgroundColor c = Customization_Immediate $ set (initialViewStyle . field @"_viewStyle_backgroundColor") (Identity c)
 
 -- |Dynamically set the background color of any view.
-dynBackgroundColor :: (Reflex t, HasViewConfig layout t s) => Dynamic t Color -> Customization t s
+dynBackgroundColor :: (Reflex t, HasViewConfig t layout s) => Dynamic t Color -> Customization t s
 dynBackgroundColor d = Customization_PostBuild $ \ pb ->
   modifyViewStyle $ set (field @"_viewStyle_backgroundColor") (leftmost [updated d, tag (current d) pb])
 
 -- |Set the accessibility label of any view to a static value.
-accessibilityLabel :: HasViewConfig layout t s => Text -> Customization t s
+accessibilityLabel :: HasViewConfig t layout s => Text -> Customization t s
 accessibilityLabel t = Customization_Immediate $ set (viewConfig . field @"_viewConfig_initialAccessibilityLabel") (Just t)
 
 -- |Dynamically set the accessibility label of any view.
-dynAccessibilityLabel :: (Reflex t, HasViewConfig layout t s) => Dynamic t (Maybe Text) -> Customization t s
+dynAccessibilityLabel :: (Reflex t, HasViewConfig t layout s) => Dynamic t (Maybe Text) -> Customization t s
 dynAccessibilityLabel d = Customization_PostBuild $ \ pb ->
   set (viewConfig . field @"_viewConfig_setAccessibilityLabel") (Just $ leftmost [updated d, tag (current d) pb])
 
 -- |Set the content layout parameters of any view.
-layout :: HasViewConfig layout t s => ContentLayout layout t -> Customization t s
+layout :: HasViewConfig t layout s => ContentLayout t layout -> Customization t s
 layout l = Customization_Immediate $ set (viewConfig . field @"_viewConfig_layout") l
 
 -- |Set the container layout parameters of any container view.
-containerLayout :: ContainerLayout layout' t -> Customization t (ContainerConfig layout layout' t)
+containerLayout :: ContainerLayout t layout' -> Customization t (ContainerConfig t layout layout')
 containerLayout l = Customization_Immediate $ set (field @"_containerConfig_layout") l
 
 -- |Set the layout of a container view to the default settings of a particular type.
-defaultLayout :: forall layout' layout t. (Reflex t, ViewLayout layout' t) => Customization t (ContainerConfig layout layout' t)
+defaultLayout :: forall t layout' layout. (Reflex t, ViewLayout t layout') => Customization t (ContainerConfig t layout layout')
 defaultLayout = containerLayout def
 
 -- |Set the layout of a container view to a default 'FillLayout'
-fillLayout :: Reflex t => Customization t (ContainerConfig layout FillLayout t)
+fillLayout :: Reflex t => Customization t (ContainerConfig t layout FillLayout)
 fillLayout = defaultLayout
 
 -- |Set the layout of a container view to a default 'ColumnLayout'
-columnLayout :: Reflex t => Customization t (ContainerConfig layout ColumnLayout t)
+columnLayout :: Reflex t => Customization t (ContainerConfig t layout ColumnLayout)
 columnLayout = defaultLayout
 
 -- |Set the layout of a container view to a default 'RowLayout'
-rowLayout :: Reflex t => Customization t (ContainerConfig layout RowLayout t)
+rowLayout :: Reflex t => Customization t (ContainerConfig t layout RowLayout)
 rowLayout = defaultLayout
 
 -- |Set the layout of a container view to a default 'ConstraintLayout'
-constraintLayout :: Reflex t => Customization t (ContainerConfig layout ConstraintLayout t)
+constraintLayout :: Reflex t => Customization t (ContainerConfig t layout ConstraintLayout)
 constraintLayout = defaultLayout
 
 -- |Set the text color of a text view to a static color.
-textColor :: Color -> Customization t (TextConfig layout t)
+textColor :: Color -> Customization t (TextConfig t layout)
 textColor c = Customization_Immediate $ set (initialTextStyle . field @"_textStyle_textColor") (Identity c)
 
 -- |Dynamically set the text color of a text view.
-dynTextColor :: Reflex t => Dynamic t Color -> Customization t (TextConfig layout t)
+dynTextColor :: Reflex t => Dynamic t Color -> Customization t (TextConfig t layout)
 dynTextColor d = Customization_PostBuild $ \ pb ->
   modifyTextStyle $ set (field @"_textStyle_textColor") (leftmost [updated d, tag (current d) pb])
 
 -- |Set the font of a text view to a static color.
-textFont :: Font -> Customization t (TextConfig layout t)
+textFont :: Font -> Customization t (TextConfig t layout)
 textFont f = Customization_Immediate $ set (initialTextStyle . field @"_textStyle_font") (Identity f)
 
 -- |Dynamically set the font of a text view.
-dynTextFont :: Reflex t => Dynamic t Font -> Customization t (TextConfig layout t)
+dynTextFont :: Reflex t => Dynamic t Font -> Customization t (TextConfig t layout)
 dynTextFont d = Customization_PostBuild $ \ pb ->
   modifyTextStyle $ set (field @"_textStyle_font") (leftmost [updated d, tag (current d) pb])
 
 -- |Class to paper over the various view configurations which include a 'ViewConfig'.
-class HasViewConfig layout t a | a -> t, a -> layout where
-  viewConfig :: Lens' a (ViewConfig layout t)
+class HasViewConfig t layout a | a -> t, a -> layout where
+  viewConfig :: Lens' a (ViewConfig t layout)
 
 -- |Trivial identity case.
-instance HasViewConfig layout t (ViewConfig layout t) where
+instance HasViewConfig t layout (ViewConfig t layout) where
   viewConfig = id
 
 -- |Focus on the 'ViewConfig' inside a 'ContainerConfig'.
-instance HasViewConfig layout t (ContainerConfig layout layout' t) where
+instance HasViewConfig t layout (ContainerConfig t layout layout') where
   viewConfig = field @"_containerConfig_viewConfig"
 
 -- |Focus on the 'ViewConfig' inside a 'TextConfig'.
-instance HasViewConfig layout t (TextConfig layout t) where
+instance HasViewConfig t layout (TextConfig t layout) where
   viewConfig = field @"_textConfig_viewConfig"
 
 -- |Focus on the '_viewConfig_initialViewStyle' of any config which has or is a 'ViewConfig'.
-initialViewStyle :: HasViewConfig layout t s => Lens' s (ViewStyle Identity)
+initialViewStyle :: HasViewConfig t layout s => Lens' s (ViewStyle Identity)
 initialViewStyle = viewConfig . field @"_viewConfig_initialStyle"
 
 -- |Helper to build a customization which sets a @modifyViewStyle@. @modifyViewStyle@ defaults to @Nothing@; this helper substitutes
 -- @Just defaultModifyViewStyle@ then applies the given function.
-modifyViewStyle :: forall layout t s. (Reflex t, HasViewConfig layout t s) => (ViewStyle (Event t) -> ViewStyle (Event t)) -> s -> s
+modifyViewStyle :: forall t layout s. (Reflex t, HasViewConfig t layout s) => (ViewStyle (Event t) -> ViewStyle (Event t)) -> s -> s
 modifyViewStyle f s =
   let target :: Lens' s (Maybe (ViewStyle (Event t)))
       target = viewConfig . field @"_viewConfig_modifyStyle"
   in set target (Just . f . fromMaybe def . view target $ s) s
 
 -- |Focus on the '_textConfig_initialTextStyle' of a 'TextConfig'.
-initialTextStyle :: Lens' (TextConfig layout t) (TextStyle Identity)
+initialTextStyle :: Lens' (TextConfig t layout) (TextStyle Identity)
 initialTextStyle = field @"_textConfig_initialStyle"
 
 -- |Helper to build a customization which sets a @modifyTextStyle@. @modifyTextStyle@ defaults to @Nothing@; this helper substitutes
 -- @Just defaultModifyTextStyle@ then applies the given function.
-modifyTextStyle :: forall layout t. Reflex t => (TextStyle (Event t) -> TextStyle (Event t)) -> TextConfig layout t -> TextConfig layout t
+modifyTextStyle :: forall t layout. Reflex t => (TextStyle (Event t) -> TextStyle (Event t)) -> TextConfig t layout -> TextConfig t layout
 modifyTextStyle f s =
-  let target :: Lens' (TextConfig layout t) (Maybe (TextStyle (Event t)))
+  let target :: Lens' (TextConfig t layout) (Maybe (TextStyle (Event t)))
       target = field @"_textConfig_modifyStyle"
   in set target (Just . f . fromMaybe def . view target $ s) s
 

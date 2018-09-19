@@ -8,6 +8,6 @@ module Reflex.Native.ViewLayout.Class
 import Data.Default (Default)
 
 
-class (Default (ContainerLayout layout t), Default (ContentLayout layout t)) => ViewLayout layout t where
-  data ContainerLayout layout t :: *
-  data ContentLayout layout t :: *
+class (Default (ContainerLayout t layout), Default (ContentLayout t layout)) => ViewLayout t layout where
+  data ContainerLayout t layout :: *
+  data ContentLayout t layout :: *

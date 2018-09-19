@@ -29,9 +29,6 @@ import Reflex.Native.Gesture (GestureData, GestureSpec, GestureState)
 import Reflex.Native.TextConfig (TextConfig)
 import Reflex.Native.ViewConfig (RawViewConfig)
 import Reflex.Native.ViewLayout.Class (ViewLayout(type ContentLayout))
-import Reflex.Native.ViewLayout.Explicit (ExplicitLayout)
-import Reflex.Native.ViewLayout.Fill (FillLayout)
-import Reflex.Native.ViewLayout.Linear (ColumnLayout, RowLayout)
 import Reflex.NotReady.Class (NotReady)
 import Reflex.Patch (Additive, Group)
 import Reflex.PerformEvent.Class (PerformEvent)
@@ -47,34 +44,41 @@ import Reflex.Requester.Base (RequesterT(..))
 -- Each view space has raw types of the various cross-platform notions such as container views and text views, along with a raw arbitrary view type to which
 -- the other types can be converted.
 class ViewSpace space where
-  -- |The type of container views in the underlying view system, e.g. @UIView@ on UIKit or @ViewGroup@ on Android.
-  type RawContainerView space layout layout' t :: *
+  type ViewSpaceSupportsLayout t space :: * -> Constraint
 
-  containerViewAsView :: ContainerView space layout layout' t -> View space layout t
+  -- |The type of container views in the underlying view system, e.g. @UIView@ on UIKit or @ViewGroup@ on Android.
+  type RawContainerView t space layout layout' :: *
+
+  containerViewAsView :: ContainerView t space layout layout' -> View t space layout
 
   -- |The type of text views in the underlying view system, e.g. @UILabel@ on UIKit or @TextView@ on Android.
-  type RawTextView space layout t :: *
+  type RawTextView t space layout :: *
 
-  textViewAsView :: TextView space layout t -> View space layout t
+  textViewAsView :: TextView t space layout -> View t space layout
 
   -- |The type of any arbitrary view in the underlying view system that can be installed via 'placeRawView' or installed and made Reflex-aware using
   -- 'wrapRawView', e.g. @UIView@ on UIKit or @View@ on Android.
-  type RawView space layout t :: *
+  type RawView t space layout :: *
 
 -- |Wrapper around a 'RawContainerView' for a given 'ViewSpace'.
-newtype ContainerView space layout layout' t = ContainerView { _containerView_raw :: RawContainerView space layout layout' t }
-deriving instance Eq (RawContainerView space layout layout' t) => Eq (ContainerView space layout layout' t)
-deriving instance Show (RawContainerView space layout layout' t) => Show (ContainerView space layout layout' t)
+newtype ContainerView t space layout layout' = ContainerView { _containerView_raw :: RawContainerView t space layout layout' }
+deriving instance Eq (RawContainerView t space layout layout') => Eq (ContainerView t space layout layout')
+deriving instance Show (RawContainerView t space layout layout') => Show (ContainerView t space layout layout')
 
 -- |Wrapper around a 'RawTextView' for a given 'ViewSpace'.
-newtype TextView space layout t = TextView { _textView_raw :: RawTextView space layout t }
-deriving instance Eq (RawTextView space layout t) => Eq (TextView space layout t)
-deriving instance Show (RawTextView space layout t) => Show (TextView space layout t)
+newtype TextView t space layout = TextView { _textView_raw :: RawTextView t space layout }
+deriving instance Eq (RawTextView t space layout) => Eq (TextView t space layout)
+deriving instance Show (RawTextView t space layout) => Show (TextView t space layout)
 
 -- |Wrapper around a 'RawView' for a given 'ViewSpace'.
-newtype View space layout t = View { _view_raw :: RawView space layout t }
-deriving instance Eq (RawView space layout t) => Eq (View space layout t)
-deriving instance Show (RawView space layout t) => Show (View space layout t)
+newtype View t space layout = View { _view_raw :: RawView t space layout }
+deriving instance Eq (RawView t space layout) => Eq (View t space layout)
+deriving instance Show (RawView t space layout) => Show (View t space layout)
+
+type family ViewBuilderForLayout layout (m :: * -> *) :: * -> *
+
+-- |The associated 'ViewSpace' for a builder monad.
+type family ViewBuilderSpace (m :: * -> *) :: *
 
 -- |Typeclass for monads used to build view hierarchies which react over time to events in a cross-platform way. A function being polymorphic over
 -- @ViewBuilder t m@ means it should work identically on any supported platform.
@@ -83,41 +87,24 @@ class
   , Reflex t
   , Adjustable t m, NotReady t m
   , ViewSpace (ViewBuilderSpace m)
-  , ViewLayout (ViewBuilderLayout m) t
-  , ViewLayoutSupport ExplicitLayout m
-  , ViewLayoutSupport FillLayout m
-  , ViewLayoutSupport ColumnLayout m
-  , ViewLayoutSupport RowLayout m
-  ) => ViewBuilder t m | m -> t where
-  -- |The type of layout for subviews of the current builder monad.
-  type ViewBuilderLayout m :: *
-
-  -- |The type of a similar builder to @m@ except using a different layout type.
-  -- It should hold that @ViewBuilderLayout (ViewBuilderForLayout layout m) ~ layout@ (that is, that changing the layout type is natural)
-  -- and @ViewBuilderForLayout (ViewBuilderLayout m) m ~ m@ (that is, that changing the layout type doesn't affect @m@ other than the layout type).
-  type ViewBuilderForLayout layout m :: * -> *
-
-  -- |The associated 'ViewSpace' for this builder monad.
-  type ViewBuilderSpace m :: *
-
-  -- |The constraint required for supporting a particular layout type in this builder monad.
-  type ViewLayoutSupport layout m :: Constraint
-
+  , ViewSpaceSupportsLayout t (ViewBuilderSpace m) layout
+  , ViewLayout t layout
+  ) => ViewBuilder t layout m | m -> t, m -> layout where
   -- |Create a static text view with the given configuration and place it in the hierarchy.
-  buildTextView :: TextConfig (ViewBuilderLayout m) t -> m (TextView (ViewBuilderSpace m) (ViewBuilderLayout m) t)
+  buildTextView :: TextConfig t layout -> m (TextView t (ViewBuilderSpace m) layout)
 
   -- |Create a view containing some child hierarchy, returning the created view along with whatever the result of the inner build was.
   buildContainerView
-    :: (n ~ ViewBuilderForLayout layout' m, ViewLayoutSupport layout' n, ViewLayout layout' t)
-    => ContainerConfig (ViewBuilderLayout m) layout' t
-    -> n a
-    -> m (a, ContainerView (ViewBuilderSpace m) (ViewBuilderLayout m) layout' t)
+    :: (ViewSpaceSupportsLayout t (ViewBuilderSpace m) layout')
+    => ContainerConfig t layout layout'
+    -> ViewBuilderForLayout layout' m a
+    -> m (a, ContainerView t (ViewBuilderSpace m) layout layout')
 
   -- |Place a 'RawView' created externally in the view hierarchy being built, for example with functions or libraries that know the precise type of view
   -- hierarchy in use.
   --
   -- Behavior is undefined if the given view node is already in the view hierarchy somewhere else, though each specific view hierarchy has a defined behavior.
-  placeRawView :: ContentLayout (ViewBuilderLayout m) t -> RawView (ViewBuilderSpace m) (ViewBuilderLayout m) t -> m ()
+  placeRawView :: ContentLayout t layout -> RawView t (ViewBuilderSpace m) layout -> m ()
 
   -- |Wrap a 'RawView' for the appropriate 'ViewSpace' with Reflex functionality configured via the given 'RawViewConfig', such as the ability to change the
   -- view style or layout in response to @Event@s or recognize gestures using 'recognizeGesture'.
@@ -125,7 +112,7 @@ class
   -- Behavior of a view wrapped twice will probably not be what you expect; updates associated with later invocations of @wrapRawView@ will probably stomp
   -- earlier invocations of @wrapRawView@, though it is undefined for any @ViewBuilder t m@ if that is so, and even if so which property updates will be
   -- applied.
-  wrapRawView :: RawView (ViewBuilderSpace m) layout t -> RawViewConfig t -> m (View (ViewBuilderSpace m) layout t)
+  wrapRawView :: RawView t (ViewBuilderSpace m) layout -> RawViewConfig t -> m (View t (ViewBuilderSpace m) layout)
 
   -- |Given some gesture to recognize and any parameters of that recognition, return an @Event@ which fires each time the state of recognition of the gesture
   -- on the given view changes.
@@ -144,69 +131,62 @@ class
   --
   -- __Warning:__ the returned @Event@ is only guaranteed to be valid in the current builder scope. It may (or may not) fire after the current scope is removed
   -- by way of 'Reflex.Class.Adjustable' methods such as 'Reflex.Class.runWithReplace'.
-  recognizeGesture :: View (ViewBuilderSpace m) layout t -> GestureSpec gs -> m (Event t (GestureState (GestureData gs)))
+  recognizeGesture :: View t (ViewBuilderSpace m) layout -> GestureSpec gs -> m (Event t (GestureState (GestureData gs)))
 
   {-# INLINABLE buildTextView #-}
   default buildTextView
-    :: (MonadTrans f, m ~ f n, ViewBuilderLayout n ~ ViewBuilderLayout m, ViewBuilderSpace n ~ ViewBuilderSpace m, ViewBuilder t n, Monad n)
-    => TextConfig (ViewBuilderLayout m) t -> m (TextView (ViewBuilderSpace m) (ViewBuilderLayout m) t)
+    :: (MonadTrans f, m ~ f n, ViewBuilderSpace n ~ ViewBuilderSpace m, ViewBuilder t layout n, Monad n)
+    => TextConfig t layout -> m (TextView t (ViewBuilderSpace m) layout)
   buildTextView cfg = lift $ buildTextView cfg
 
   {-# INLINABLE placeRawView #-}
   default placeRawView
-    :: (MonadTrans f, m ~ f n, ViewBuilderLayout n ~ ViewBuilderLayout m, ViewBuilderSpace n ~ ViewBuilderSpace m, ViewBuilder t n, Monad n)
-    => ContentLayout (ViewBuilderLayout m) t -> RawView (ViewBuilderSpace m) (ViewBuilderLayout m) t -> m ()
+    :: (MonadTrans f, m ~ f n, ViewBuilderSpace n ~ ViewBuilderSpace m, ViewBuilder t layout n, Monad n)
+    => ContentLayout t layout -> RawView t (ViewBuilderSpace m) layout -> m ()
   placeRawView l v = lift $ placeRawView l v
 
   {-# INLINABLE wrapRawView #-}
   default wrapRawView
-    :: (MonadTrans f, m ~ f n, ViewBuilderLayout n ~ ViewBuilderLayout m, ViewBuilderSpace n ~ ViewBuilderSpace m, ViewBuilder t n, Monad n)
-    => RawView (ViewBuilderSpace m) layout t -> RawViewConfig t -> m (View (ViewBuilderSpace m) layout t)
+    :: (MonadTrans f, m ~ f n, ViewBuilderSpace n ~ ViewBuilderSpace m, ViewBuilder t layout n, Monad n)
+    => RawView t (ViewBuilderSpace m) layout -> RawViewConfig t -> m (View t (ViewBuilderSpace m) layout)
   wrapRawView v cfg = lift $ wrapRawView v cfg
 
   {-# INLINABLE recognizeGesture #-}
   default recognizeGesture
-    :: (MonadTrans f, m ~ f n, ViewBuilderLayout n ~ ViewBuilderLayout m, ViewBuilderSpace n ~ ViewBuilderSpace m, ViewBuilder t n, Monad n)
-    => View (ViewBuilderSpace m) layout t -> GestureSpec gs -> m (Event t (GestureState (GestureData gs)))
+    :: (MonadTrans f, m ~ f n, ViewBuilderSpace n ~ ViewBuilderSpace m, ViewBuilder t layout n, Monad n)
+    => View t (ViewBuilderSpace m) layout -> GestureSpec gs -> m (Event t (GestureState (GestureData gs)))
   recognizeGesture v spec = lift $ recognizeGesture v spec
 
 -- |Pass through 'PostBuildT'.
-instance (ViewBuilder t m, PerformEvent t m, MonadFix m, MonadHold t m) => ViewBuilder t (PostBuildT t m) where
-  type ViewBuilderLayout (PostBuildT t m) = ViewBuilderLayout m
-  type ViewBuilderForLayout layout (PostBuildT t m) = PostBuildT t (ViewBuilderForLayout layout m)
-  type ViewBuilderSpace (PostBuildT t m) = ViewBuilderSpace m
-  type ViewLayoutSupport layout (PostBuildT t m) = ViewLayoutSupport layout m
+instance (ViewBuilder t layout m, PerformEvent t m, MonadFix m, MonadHold t m) => ViewBuilder t layout (PostBuildT t m) where
   buildContainerView cfg (PostBuildT body) = PostBuildT $ buildContainerView cfg body
 
+type instance ViewBuilderForLayout layout (PostBuildT t m) = PostBuildT t (ViewBuilderForLayout layout m)
+type instance ViewBuilderSpace (PostBuildT t m) = ViewBuilderSpace m
+
 -- |Pass through 'ReaderT'.
-instance (ViewBuilder t m, Monad m) => ViewBuilder t (ReaderT r m) where
-  type ViewBuilderLayout (ReaderT r m) = ViewBuilderLayout m
-  type ViewBuilderForLayout layout (ReaderT r m) = ReaderT r (ViewBuilderForLayout layout m)
-  type ViewBuilderSpace (ReaderT r m) = ViewBuilderSpace m
-  type ViewLayoutSupport layout (ReaderT r m) = ViewLayoutSupport layout m
+instance (ViewBuilder t layout m, Monad m) => ViewBuilder t layout (ReaderT r m) where
   buildContainerView cfg body = do
     r <- ask
     (a, vn) <- lift $ buildContainerView cfg (runReaderT body r)
     pure (a, vn)
 
+type instance ViewBuilderForLayout layout (ReaderT r m) = ReaderT r (ViewBuilderForLayout layout m)
+type instance ViewBuilderSpace (ReaderT r m) = ViewBuilderSpace m
+
 -- |Pass through 'DynamicWriterT'.
-instance (ViewBuilder t m, MonadHold t m, MonadFix m, Monoid w) => ViewBuilder t (DynamicWriterT t w m) where
-  type ViewBuilderLayout (DynamicWriterT t w m) = ViewBuilderLayout m
-  type ViewBuilderForLayout layout (DynamicWriterT t w m) = DynamicWriterT t w (ViewBuilderForLayout layout m)
-  type ViewBuilderSpace (DynamicWriterT t w m) = ViewBuilderSpace m
-  type ViewLayoutSupport layout (DynamicWriterT t w m) = ViewLayoutSupport layout m
+instance (ViewBuilder t layout m, MonadHold t m, MonadFix m, Monoid w) => ViewBuilder t layout (DynamicWriterT t w m) where
   buildContainerView cfg (DynamicWriterT body) = DynamicWriterT $ do
     oldS <- get
     ((a, newS), vn) <- lift . buildContainerView cfg $ runStateT body oldS
     put newS
     pure (a, vn)
 
+type instance ViewBuilderForLayout layout (DynamicWriterT t w m) = DynamicWriterT t w (ViewBuilderForLayout layout m)
+type instance ViewBuilderSpace (DynamicWriterT t w m) = ViewBuilderSpace m
+
 -- |Pass through 'RequesterT'.
-instance (ViewBuilder t m, MonadHold t m, MonadFix m) => ViewBuilder t (RequesterT t request response m) where
-  type ViewBuilderLayout (RequesterT t request response m) = ViewBuilderLayout m
-  type ViewBuilderForLayout layout (RequesterT t request response m) = RequesterT t request response (ViewBuilderForLayout layout m)
-  type ViewBuilderSpace (RequesterT t request response m) = ViewBuilderSpace m
-  type ViewLayoutSupport layout (RequesterT t request response m) = ViewLayoutSupport layout m
+instance (ViewBuilder t layout m, MonadHold t m, MonadFix m) => ViewBuilder t layout (RequesterT t request response m) where
   buildContainerView cfg (RequesterT body) = RequesterT $ do
     r <- ask
     oldS <- get
@@ -214,27 +194,27 @@ instance (ViewBuilder t m, MonadHold t m, MonadFix m) => ViewBuilder t (Requeste
     put newS
     pure (a, vn)
 
+type instance ViewBuilderForLayout layout (RequesterT t request response m) = RequesterT t request response (ViewBuilderForLayout layout m)
+type instance ViewBuilderSpace (RequesterT t request response m) = ViewBuilderSpace m
+
 -- |Pass through 'EventWriterT'.
-instance (ViewBuilder t m, MonadHold t m, MonadFix m, Semigroup w) => ViewBuilder t (EventWriterT t w m) where
-  type ViewBuilderLayout (EventWriterT t w m) = ViewBuilderLayout m
-  type ViewBuilderForLayout layout (EventWriterT t w m) = EventWriterT t w (ViewBuilderForLayout layout m)
-  type ViewBuilderSpace (EventWriterT t w m) = ViewBuilderSpace m
-  type ViewLayoutSupport layout (EventWriterT t w m) = ViewLayoutSupport layout m
+instance (ViewBuilder t layout m, MonadHold t m, MonadFix m, Semigroup w) => ViewBuilder t layout (EventWriterT t w m) where
   buildContainerView cfg (EventWriterT body) = EventWriterT $ do
     oldS <- get
     ((a, newS), vn) <- lift . buildContainerView cfg $ runStateT body oldS
     put newS
     pure (a, vn)
 
+type instance ViewBuilderForLayout layout (EventWriterT t w m) = EventWriterT t w (ViewBuilderForLayout layout m)
+type instance ViewBuilderSpace (EventWriterT t w m) = ViewBuilderSpace m
+
 -- |Pass through 'QueryT'.
-instance (ViewBuilder t m, MonadHold t m, MonadFix m, Group q, Query q, Additive q) => ViewBuilder t (QueryT t q m) where
-  type ViewBuilderLayout (QueryT t q m) = ViewBuilderLayout m
-  type ViewBuilderForLayout layout (QueryT t q m) = QueryT t q (ViewBuilderForLayout layout m)
-  type ViewBuilderSpace (QueryT t q m) = ViewBuilderSpace m
-  type ViewLayoutSupport layout (QueryT t q m) = ViewLayoutSupport layout m
+instance (ViewBuilder t layout m, MonadHold t m, MonadFix m, Group q, Query q, Additive q) => ViewBuilder t layout (QueryT t q m) where
   buildContainerView cfg (QueryT body) = QueryT $ do
     oldS <- get
     ((a, newS), vn) <- lift . buildContainerView cfg $ runStateT body oldS
     put newS
     pure (a, vn)
 
+type instance ViewBuilderForLayout layout (QueryT t q m) = QueryT t q (ViewBuilderForLayout layout m)
+type instance ViewBuilderSpace (QueryT t q m) = ViewBuilderSpace m

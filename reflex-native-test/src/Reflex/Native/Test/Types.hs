@@ -20,7 +20,7 @@ module Reflex.Native.Test.Types
   -- * Unique identities
     TestIdentity, unTestIdentity, newTestIdentity, tshowTestIdentity
   -- * Test views
-  , TestViewSpace, TestHolder, TestViewCommon(..), TestViewLayout(..)
+  , TestViewSpace, TestViewSpaceLayout(..), TestHolder, TestViewCommon(..), TestViewLayout(..)
   , TestContainerViewLayout(..), TestContainerView(..), SomeTestContainerView(..)
   , TestTextView(..), SomeTestTextView(..)
   , TestMarker(..), SomeTestMarker(..)
@@ -35,14 +35,14 @@ module Reflex.Native.Test.Types
   ) where
 
 import Control.Concurrent.Chan (Chan)
-import Control.Concurrent.STM.TVar (TVar)
+import Control.Concurrent.STM.TVar (TVar, newTVarIO)
 import Control.Lens (Lens', Traversal', view)
 import Control.Monad.Exception (MonadAsyncException, MonadException)
 import Control.Monad.Fix (MonadFix)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.RWS.Strict (RWST)
 import Data.Dependent.Sum (DSum)
-import  Data.DList (DList)
+import Data.DList (DList)
 import qualified Data.DList as DList
 import Data.Foldable (toList)
 import Data.Functor.Identity (Identity(..))
@@ -50,7 +50,7 @@ import Data.Generics.Product (field)
 import Data.IntMap (IntMap)
 import Data.IORef (IORef, newIORef, atomicModifyIORef')
 import Data.Monoid ((<>))
-import Data.Proxy (Proxy)
+import Data.Proxy (Proxy(..))
 import Data.Sequence (Seq)
 import Data.Text (Text, pack)
 import GHC.Generics (Generic)
@@ -60,12 +60,14 @@ import Reflex.Host.Class (ReflexHost(type EventHandle, type EventTrigger))
 import Reflex.Native.Geometry (Axis(Horizontal, Vertical), KnownAxis(axisVal), Rect)
 import Reflex.Native.TextStyle (TextStyle(..))
 import Reflex.Native.ViewBuilder.Class
-  ( ViewSpace(type RawContainerView, containerViewAsView, type RawTextView, textViewAsView, type RawView), ContainerView(..), TextView(..), View(..)
+  ( ViewSpace(type ViewSpaceSupportsLayout, type RawContainerView, containerViewAsView, type RawTextView, textViewAsView, type RawView)
+  , ContainerView(..), TextView(..), View(..)
   )
+import Reflex.Native.ViewLayout.Class (ViewLayout(type ContainerLayout))
 import Reflex.Native.ViewLayout.Constraint (ConstraintLayout, ViewConstraint)
 import Reflex.Native.ViewLayout.Explicit (ExplicitLayout)
 import Reflex.Native.ViewLayout.Fill (FillLayout)
-import Reflex.Native.ViewLayout.Linear (LinearLayout)
+import Reflex.Native.ViewLayout.Linear (LinearLayout, ContainerLayout(ContainerLayout_Linear, _containerLayout_linear_spacingBetween))
 import Reflex.Native.ViewStyle (ViewStyle(..))
 import Reflex.PerformEvent.Base (FireCommand)
 import Reflex.Spider (SpiderHost, SpiderTimeline)
@@ -78,11 +80,29 @@ data TestViewSpace
 
 -- |Instance for testing.
 instance ViewSpace TestViewSpace where
-  type RawContainerView TestViewSpace layout layout' t = TestContainerView layout layout' t TVar
+  type ViewSpaceSupportsLayout t TestViewSpace = TestViewSpaceLayout t
+
+  type RawContainerView t TestViewSpace layout layout' = TestContainerView t layout layout' TVar
+  type RawTextView      t TestViewSpace layout         = TestTextView layout TVar
+  type RawView          t TestViewSpace layout         = TestView t layout TVar
+
   containerViewAsView (ContainerView cv) = View (TestView_Container cv)
-  type RawTextView TestViewSpace layout t = TestTextView layout TVar
   textViewAsView (TextView tv) = View (TestView_Text tv)
-  type RawView TestViewSpace layout t = TestView layout t TVar
+
+class ViewLayout t layout => TestViewSpaceLayout t layout where
+  makeTestContainerViewLayout :: MonadIO m => ContainerLayout t layout -> m (TestContainerViewLayout t layout TVar)
+
+instance TestViewSpaceLayout t ConstraintLayout where
+  makeTestContainerViewLayout _ = TestContainerViewLayout_Constraint <$> liftIO (newTVarIO mempty)
+
+instance TestViewSpaceLayout t ExplicitLayout where
+  makeTestContainerViewLayout _ = pure TestContainerViewLayout_Explicit
+
+instance TestViewSpaceLayout t FillLayout where
+  makeTestContainerViewLayout _ = pure TestContainerViewLayout_Fill
+
+instance forall t axis. KnownAxis axis => TestViewSpaceLayout t (LinearLayout axis) where
+  makeTestContainerViewLayout (ContainerLayout_Linear {..}) = pure $ TestContainerViewLayout_Linear (Proxy @axis) _containerLayout_linear_spacingBetween
 
 -- |A unique identity for a test view, holder, marker, or similar thing qualified by what it's an identity for. Almost identical to "Data.Unique" except that
 -- this has a more useful 'Show' instance for diagnostics.
@@ -181,17 +201,17 @@ instance Rank2.Traversable (TestViewCommon layout) where
   traverse f (TestViewCommon a b c d) = TestViewCommon a <$> Rank2.traverse f b <*> f c <*> Rank2.traverse f d
 
 -- |Layout information for subviews of a 'TestContainerView'.
-data TestContainerViewLayout layout t v where
+data TestContainerViewLayout t layout v where
   -- |Lay out the subviews according to a system of linear equations.
-  TestContainerViewLayout_Constraint :: forall t v. v (IntMap (ViewConstraint TestViewSpace t)) -> TestContainerViewLayout ConstraintLayout t v
+  TestContainerViewLayout_Constraint :: forall t v. v (IntMap (ViewConstraint t TestViewSpace)) -> TestContainerViewLayout t ConstraintLayout v
   -- |Lay out the subviews with fixed rectangles
-  TestContainerViewLayout_Explicit :: forall t v. TestContainerViewLayout ExplicitLayout t v
+  TestContainerViewLayout_Explicit :: forall t v. TestContainerViewLayout t ExplicitLayout v
   -- |Make all subviews the same size as the container.
-  TestContainerViewLayout_Fill :: forall t v. TestContainerViewLayout FillLayout t v
+  TestContainerViewLayout_Fill :: forall t v. TestContainerViewLayout t FillLayout v
   -- |Lay out the subviews in a horizontal or vertical line with some amount of space in between each.
-  TestContainerViewLayout_Linear :: forall (axis :: Axis) t v. KnownAxis axis => Proxy axis -> Double -> TestContainerViewLayout (LinearLayout axis) t v
+  TestContainerViewLayout_Linear :: forall (axis :: Axis) t v. KnownAxis axis => Proxy axis -> Double -> TestContainerViewLayout t (LinearLayout axis) v
 
-instance Show (TestContainerViewLayout layout t Identity) where
+instance Show (TestContainerViewLayout t layout Identity) where
   showsPrec _ = \ case
     TestContainerViewLayout_Constraint (Identity cs) -> showString "constraints: " . showList (toList cs)
     TestContainerViewLayout_Explicit -> showString "explicit"
@@ -202,7 +222,7 @@ instance Show (TestContainerViewLayout layout t Identity) where
             Vertical -> showString "column with spacing "
       in direction . shows s
 
-instance Show (TestContainerViewLayout layout t TVar) where
+instance Show (TestContainerViewLayout t layout TVar) where
   showsPrec _ = \ case
     TestContainerViewLayout_Constraint _ -> showString "constraints"
     TestContainerViewLayout_Explicit -> showString "explicit"
@@ -213,7 +233,7 @@ instance Show (TestContainerViewLayout layout t TVar) where
             Vertical -> showString "column with spacing "
       in direction . shows s
   
-instance Rank2.Functor (TestContainerViewLayout layout t) where
+instance Rank2.Functor (TestContainerViewLayout t layout) where
   f <$> TestContainerViewLayout_Constraint a = TestContainerViewLayout_Constraint (f a)
   _ <$> TestContainerViewLayout_Explicit = TestContainerViewLayout_Explicit
   _ <$> TestContainerViewLayout_Fill = TestContainerViewLayout_Fill
@@ -223,39 +243,39 @@ instance Rank2.Apply (TestContainerViewLayout layout t) where
   TestContainerViewLayout_Explicit <*> _                                         = TestContainerViewLayout_Explicit
   TestContainerViewLayout_Fill <*> _                                             = TestContainerViewLayout_Fill
   TestContainerViewLayout_Linear a s <*> _                                       = TestContainerViewLayout_Linear a s
-instance Rank2.Foldable (TestContainerViewLayout layout t) where
+instance Rank2.Foldable (TestContainerViewLayout t layout) where
   foldMap f (TestContainerViewLayout_Constraint cs) = f cs
   foldMap _ TestContainerViewLayout_Explicit = mempty
   foldMap _ TestContainerViewLayout_Fill = mempty
   foldMap _ (TestContainerViewLayout_Linear _ _) = mempty
-instance Rank2.Traversable (TestContainerViewLayout layout t) where
+instance Rank2.Traversable (TestContainerViewLayout t layout) where
   traverse f (TestContainerViewLayout_Constraint cs) = TestContainerViewLayout_Constraint <$> f cs
   traverse _ TestContainerViewLayout_Explicit        = pure TestContainerViewLayout_Explicit
   traverse _ TestContainerViewLayout_Fill            = pure TestContainerViewLayout_Fill
   traverse _ (TestContainerViewLayout_Linear a s)    = pure (TestContainerViewLayout_Linear a s)
 
 -- |A container view which has common view attributes and a collection of subviews.
-data TestContainerView layout layout' t v = TestContainerView
+data TestContainerView t layout layout' v = TestContainerView
   { _testContainerView_common :: TestViewCommon layout v
   -- ^The common view attributes for the container.
-  , _testContainerView_layout :: TestContainerViewLayout layout' t v
+  , _testContainerView_layout :: TestContainerViewLayout t layout' v
   -- ^The layout information for the subviews of the container.
-  , _testContainerView_contents :: v (Seq (TestView layout' t v))
+  , _testContainerView_contents :: v (Seq (TestView t layout' v))
   -- ^The subviews.
   } deriving (Generic)
 -- can't instance rank-2 Functor on account of the fixed point - would need @v@ or @v'@ to be a Functor but they need to be natural.
 
 -- |Show a 'TestContainerView' for test assertion messages and the like.
-instance Show (TestContainerView layout layout' t Identity) where
+instance Show (TestContainerView t layout layout' Identity) where
   showsPrec _ = showsTestContainerView True
 
-instance Show (TestContainerView layout layout' t TVar) where
+instance Show (TestContainerView t layout layout' TVar) where
   showsPrec _ (TestContainerView {..})
     = showString "container " . shows _testContainerView_common
     . showString " with layout " . shows _testContainerView_layout
 
 -- |Show a 'TestContainerView' for test assertion messages and the like. Takes a boolean indicating whether subviews will be dumped (@True@) or not (@False@).
-showsTestContainerView :: Bool -> TestContainerView layout layout' t Identity -> ShowS
+showsTestContainerView :: Bool -> TestContainerView t layout layout' Identity -> ShowS
 showsTestContainerView recurse (TestContainerView {..})
   = showString "container " . shows _testContainerView_common
   . showString " with layout " . shows _testContainerView_layout
@@ -266,7 +286,7 @@ showsTestContainerView recurse (TestContainerView {..})
 traverseTestContainerView
   :: Applicative f
   => (forall a b. (a -> f b) -> v a -> f (v' b))
-  -> TestContainerView layout layout' t v -> f (TestContainerView layout layout' t v')
+  -> TestContainerView t layout layout' v -> f (TestContainerView t layout layout' v')
 traverseTestContainerView f (TestContainerView {..}) =
   TestContainerView
     <$> Rank2.traverse (f pure) _testContainerView_common
@@ -274,10 +294,10 @@ traverseTestContainerView f (TestContainerView {..}) =
     <*> f (traverse (traverseTestView f)) _testContainerView_contents
 
 -- |Show the type and identity of a test container view, equivalent to @'tshowTestViewIdentity' . 'TestView_Container'@
-tshowTestContainerViewIdentity :: TestContainerView layout layout' t v -> Text
+tshowTestContainerViewIdentity :: TestContainerView t layout layout' v -> Text
 tshowTestContainerViewIdentity = tshowTestViewIdentity . TestView_Container
 
-data SomeTestContainerView t v = forall layout layout'. SomeTestContainerView (TestContainerView layout layout' t v)
+data SomeTestContainerView t v = forall layout layout'. SomeTestContainerView (TestContainerView t layout layout' v)
 
 instance Eq (SomeTestContainerView t v) where
   SomeTestContainerView cv1 == SomeTestContainerView cv2 =
@@ -341,26 +361,26 @@ instance Show (SomeTestTextView TVar) where
   showsPrec p (SomeTestTextView tv) = showsPrec p tv
 
 -- |A marker view node which doesn't have any display but denotes the boundary between replaceable view segments.
-data TestMarker layout t = TestMarker
+data TestMarker t layout = TestMarker
   { _testMarker_identity :: TestIdentity
   -- ^The unique identity of the marker.
-  , _testMarker_parent :: forall layout'. TVar (Maybe (TVar (Seq (TestContainerView layout' layout t TVar))))
+  , _testMarker_parent :: TVar (Maybe (TestHolder t layout))
   -- ^Where the marker is installed, or Nothing if it's not installed.
-  }
+  } deriving (Generic)
 
 -- |Test for equal identity of two marker nodes
-instance Eq (TestMarker layout t) where
+instance Eq (TestMarker t layout) where
   a == b = _testMarker_identity a == _testMarker_identity b
 
 -- |Show a 'TestMarker' for test assertion messages and the like.
-instance Show (TestMarker layout t) where
+instance Show (TestMarker t layout) where
   showsPrec _ (TestMarker {..}) = showString "marker #" . shows (unTestIdentity _testMarker_identity)
 
 -- |Show the type and identity of a test marker, equivalent to @'tshowTestViewIdentity' . 'TestView_Marker'@
-tshowTestMarkerIdentity :: TestMarker layout t -> Text
+tshowTestMarkerIdentity :: TestMarker t layout -> Text
 tshowTestMarkerIdentity = tshowTestViewIdentity . TestView_Marker
 
-data SomeTestMarker t = forall layout. SomeTestMarker (TestMarker layout t)
+data SomeTestMarker t = forall layout. SomeTestMarker (TestMarker t layout)
 
 instance Eq (SomeTestMarker t) where
   SomeTestMarker m1 == SomeTestMarker m2 = _testMarker_identity m1 == _testMarker_identity m2
@@ -369,27 +389,27 @@ instance Show (SomeTestMarker t) where
   showsPrec p (SomeTestMarker m) = showsPrec p m
 
 -- |A node in the view hierarchy, either one of the @Test*View@ types or a special marker used during build time to isolate sections of the subviews.
-data TestView layout t v
-  = forall layout'. TestView_Container (TestContainerView layout layout' t v)
+data TestView t layout v
+  = forall layout'. TestView_Container (TestContainerView t layout layout' v)
   | TestView_Text (TestTextView layout v)
-  | TestView_Marker (TestMarker layout t)
+  | TestView_Marker (TestMarker t layout)
 
 -- |Test for equal identity of two view nodes
-instance Eq (TestView layout t v) where
+instance Eq (TestView t layout v) where
   a == b = view testView_identity a == view testView_identity b
 
 -- |Show a 'TestView' for test assertion messages and the like.
-instance Show (TestView layout t Identity) where
+instance Show (TestView t layout Identity) where
   showsPrec _ = showsTestView True
 
-instance Show (TestView layout t TVar) where
+instance Show (TestView t layout TVar) where
   showsPrec _ = \ case
     TestView_Container cv -> shows cv
     TestView_Text tv -> shows tv
     TestView_Marker m -> shows m
 
 -- |Show a 'TestView' for test assertion messages and the like. Takes a boolean which controls whether subviews will be dumped (@True@) or not (@False).
-showsTestView :: Bool -> TestView layout t Identity -> ShowS
+showsTestView :: Bool -> TestView t layout Identity -> ShowS
 showsTestView recurse = \ case
   -- each of the view types includes show output indicating their type, so don't duplicate it here
   TestView_Container cv -> showsTestContainerView recurse cv
@@ -397,13 +417,13 @@ showsTestView recurse = \ case
   TestView_Marker m -> shows m
 
 -- |Show a 'TestView' hierarchy on multiple lines with indenting.
-showTestViewHierarchy :: forall layout t. String -> Seq (TestView layout t Identity) -> [String]
+showTestViewHierarchy :: forall layout t. String -> Seq (TestView t layout Identity) -> [String]
 showTestViewHierarchy prefix = DList.toList . go prefix
   where
-    go :: forall layout'. String -> Seq (TestView layout' t Identity) -> DList String
+    go :: forall layout'. String -> Seq (TestView t layout' Identity) -> DList String
     go indent = foldMap (visit indent) . toList
 
-    visit :: forall layout'. String -> TestView layout' t Identity -> DList String
+    visit :: forall layout'. String -> TestView t layout' Identity -> DList String
     visit indent = \ case
       TestView_Container cv ->
         DList.cons
@@ -418,34 +438,34 @@ showTestViewHierarchy prefix = DList.toList . go prefix
 traverseTestView
   :: Applicative f
   => (forall a b. (a -> f b) -> v a -> f (v' b))
-  -> TestView layout t v -> f (TestView layout t v')
+  -> TestView t layout v -> f (TestView t layout v')
 traverseTestView f = \ case
   TestView_Container cv -> TestView_Container <$> traverseTestContainerView f cv
   TestView_Text tv -> TestView_Text <$> Rank2.traverse (f pure) tv
   TestView_Marker m -> pure (TestView_Marker m)
 
 -- |Show the type and identity of a view node
-tshowTestViewIdentity :: TestView layout t v -> Text
+tshowTestViewIdentity :: TestView t layout v -> Text
 tshowTestViewIdentity = \ case
   TestView_Container cv -> "container " <> tshowTestIdentity (_testViewCommon_identity . _testContainerView_common $ cv)
   TestView_Text tv -> "text " <> tshowTestIdentity (_testViewCommon_identity . _testTextView_common $ tv)
   TestView_Marker m -> "marker " <> tshowTestIdentity (_testMarker_identity m)
 
 -- |Traverse to the 'TestViewCommon' in a 'TestView', if it's not a 'TestView_Marker'.
-testView_common :: Traversal' (TestView layout t v) (TestViewCommon layout v)
+testView_common :: Traversal' (TestView t layout v) (TestViewCommon layout v)
 testView_common f = \ case
   TestView_Container cv -> TestView_Container <$> field @"_testContainerView_common" f cv
   TestView_Text tv -> TestView_Text <$> field @"_testTextView_common" f tv
   other -> pure other
 
 -- |Traverse to the unique identity in a 'TestView'.
-testView_identity :: Lens' (TestView layout t v) TestIdentity
+testView_identity :: Lens' (TestView t layout v) TestIdentity
 testView_identity f = \ case
   TestView_Container cv -> TestView_Container <$> (field @"_testContainerView_common" . field @"_testViewCommon_identity") f cv
   TestView_Text tv -> TestView_Text <$> (field @"_testTextView_common" . field @"_testViewCommon_identity") f tv
   TestView_Marker (TestMarker i p) -> fmap (\ i' -> TestView_Marker $ TestMarker i' p) (f i)
 
-data SomeTestView t v = forall layout. SomeTestView (TestView layout t v)
+data SomeTestView t v = forall layout. SomeTestView (TestView t layout v)
 
 instance Eq (SomeTestView t v) where
   SomeTestView v1 == SomeTestView v2 = view testView_identity v1 == view testView_identity v2
@@ -456,17 +476,17 @@ instance Show (SomeTestView t Identity) where
 instance Show (SomeTestView t TVar) where
   showsPrec p (SomeTestView v) = showsPrec p v
 
-data SomeTestViews t v = forall layout. SomeTestViews (Seq (TestView layout t v))
+data SomeTestViews t v = forall layout. SomeTestViews (Seq (TestView t layout v))
 
-withSomeTestViews :: SomeTestViews t v -> (forall layout. Seq (TestView layout t v) -> a) -> a
+withSomeTestViews :: SomeTestViews t v -> (forall layout. Seq (TestView t layout v) -> a) -> a
 withSomeTestViews (SomeTestViews vs) f = f vs
 
 -- |Type which holds a sequence of views. The same type as @_testContainerView_contents@ for @'TestContainerView' TVar@
-type TestHolder layout t = TVar (Seq (TestView layout t TVar))
+type TestHolder t layout = TVar (Seq (TestView t layout TVar))
 
 -- |The environment of an in-progress test with a handle to the view hierarchy and the event processing channel.
 data TestEnv x = TestEnv
-  { _testEnv_rootHolder :: TestHolder FillLayout (SpiderTimeline x)
+  { _testEnv_rootHolder :: TestHolder (SpiderTimeline x) FillLayout
   -- ^The root of the view hierarchy.
   , _testEnv_rootReady :: TVar Bool
   -- ^True iff the first build was immediately ready or it's been committed since.

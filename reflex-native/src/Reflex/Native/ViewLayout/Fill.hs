@@ -11,11 +11,11 @@ import Reflex.Native.ViewLayout.Class (ViewLayout(type ContainerLayout, type Con
 
 data FillLayout
 
-instance ViewLayout FillLayout t where
-  data ContainerLayout FillLayout t = ContainerLayout_Fill
-  data ContentLayout FillLayout t = ContentLayout_Fill
+instance ViewLayout t FillLayout where
+  data ContainerLayout t FillLayout = ContainerLayout_Fill
+  data ContentLayout t FillLayout = ContentLayout_Fill
 
-instance Default (ContainerLayout FillLayout t) where
+instance Default (ContainerLayout t FillLayout) where
   def = ContainerLayout_Fill
-instance Default (ContentLayout FillLayout t) where
+instance Default (ContentLayout t FillLayout) where
   def = ContentLayout_Fill

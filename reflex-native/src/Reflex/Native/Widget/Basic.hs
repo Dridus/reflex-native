@@ -38,9 +38,7 @@ import Reflex.Native.ContainerConfig (ContainerConfig(..))
 import Reflex.Native.TextConfig (TextConfig(..))
 import Reflex.Native.Widget.Customization (Customization(..), columnLayout)
 import Reflex.Native.ViewBuilder.Class
-  ( ContainerView, TextView
-  , ViewBuilder(type ViewBuilderLayout, type ViewBuilderForLayout, type ViewBuilderSpace, type ViewLayoutSupport, buildContainerView, buildTextView)
-  )
+  ( ContainerView, TextView, ViewBuilder(buildContainerView, buildTextView), ViewBuilderForLayout, ViewBuilderSpace, ViewSpace(type ViewSpaceSupportsLayout) )
 import Reflex.Native.ViewLayout.Class (ViewLayout)
 import Reflex.Native.ViewLayout.Linear (ColumnLayout)
 import Reflex.NotReady.Class (NotReady, notReadyUntil)
@@ -49,28 +47,28 @@ import Reflex.PostBuild.Class (PostBuild, getPostBuild)
 
 -- |Build a plain container view with some hierarchy inside and the default container configuration.
 container
-  :: (NotReady t m, PostBuild t m, ViewBuilder t m, n ~ ViewBuilderForLayout ColumnLayout m, ViewLayoutSupport ColumnLayout n)
-  => n a
+  :: (NotReady t m, PostBuild t m, ViewBuilder t layout m, ViewLayout t layout, ViewSpaceSupportsLayout t (ViewBuilderSpace m) ColumnLayout)
+  => ViewBuilderForLayout ColumnLayout m a
   -- ^The child hierarchy to build inside the container.
-  -> m (a, ContainerView (ViewBuilderSpace m) (ViewBuilderLayout m) ColumnLayout t)
+  -> m (a, ContainerView t (ViewBuilderSpace m) layout ColumnLayout)
 container = containerWith columnLayout
 
 -- |Build a plain container view with some hierarchy inside and the default container configuration.
 container_
-  :: (NotReady t m, PostBuild t m, ViewBuilder t m, n ~ ViewBuilderForLayout ColumnLayout m, ViewLayoutSupport ColumnLayout n)
-  => n a
+  :: (NotReady t m, PostBuild t m, ViewBuilder t layout m, ViewLayout t layout, ViewSpaceSupportsLayout t (ViewBuilderSpace m) ColumnLayout)
+  => ViewBuilderForLayout ColumnLayout m a
   -- ^The child hierarchy to build inside the container.
   -> m a
 container_ = fmap fst . container
 
 -- |Build a plain container view with some hierarchy inside and the default container configuration but with the 'ViewStyle' tweaked using the given function.
 containerWith
-  :: (NotReady t m, PostBuild t m, ViewBuilder t m, ViewLayout layout' t, n ~ ViewBuilderForLayout layout' m, ViewLayoutSupport layout' n)
-  => Customization t (ContainerConfig (ViewBuilderLayout m) layout' t)
+  :: (NotReady t m, PostBuild t m, ViewBuilder t layout m, ViewLayout t layout, ViewLayout t layout', ViewSpaceSupportsLayout t (ViewBuilderSpace m) layout')
+  => Customization t (ContainerConfig t layout layout')
   -- ^The customization to apply. See "Reflex.Native.Widget.Customization".
-  -> n a
+  -> ViewBuilderForLayout layout' m a
   -- ^The child hierarchy to build inside the container.
-  -> m (a, ContainerView (ViewBuilderSpace m) (ViewBuilderLayout m) layout' t)
+  -> m (a, ContainerView t (ViewBuilderSpace m) layout layout')
 containerWith customization body = case customization of
   Customization_Immediate f -> buildContainerView (f def) body
   Customization_PostBuild f -> do
@@ -80,25 +78,25 @@ containerWith customization body = case customization of
 
 -- |Build a plain container view with some hierarchy inside and the default container configuration but with the 'ViewStyle' tweaked using the given function.
 containerWith_
-  :: (NotReady t m, PostBuild t m, ViewBuilder t m, ViewLayout layout' t, n ~ ViewBuilderForLayout layout' m, ViewLayoutSupport layout' n)
-  => Customization t (ContainerConfig (ViewBuilderLayout m) layout' t)
+  :: (NotReady t m, PostBuild t m, ViewBuilder t layout m, ViewLayout t layout, ViewLayout t layout', ViewSpaceSupportsLayout t (ViewBuilderSpace m) layout')
+  => Customization t (ContainerConfig t layout layout')
   -- ^The customization to apply. See "Reflex.Native.Widget.Customization".
-  -> n a
+  -> ViewBuilderForLayout layout' m a
   -- ^The child hierarchy to build inside the container.
   -> m a
 containerWith_ f = fmap fst . containerWith f
 
 -- |Build a plain static text view with the given text and the default text configuration.
 text
-  :: (NotReady t m, PostBuild t m, ViewBuilder t m)
+  :: (NotReady t m, PostBuild t m, ViewBuilder t layout m, ViewLayout t layout)
   => Text
   -- ^The text to display.
-  -> m (TextView (ViewBuilderSpace m) (ViewBuilderLayout m) t)
+  -> m (TextView t (ViewBuilderSpace m) layout)
 text = textWith mempty
 
 -- |Build a plain static text view with the given text and the default text configuration.
 text_
-  :: (NotReady t m, PostBuild t m, ViewBuilder t m)
+  :: (NotReady t m, PostBuild t m, ViewBuilder t layout m, ViewLayout t layout)
   => Text
   -- ^The text to display.
   -> m ()
@@ -106,12 +104,12 @@ text_ = void . text
 
 -- |Build a static text view with the given text and the default text configuration customized using the given function.
 textWith
-  :: (NotReady t m, PostBuild t m, ViewBuilder t m)
-  => Customization t (TextConfig (ViewBuilderLayout m) t)
+  :: (NotReady t m, PostBuild t m, ViewBuilder t layout m, ViewLayout t layout)
+  => Customization t (TextConfig t layout)
   -- ^The customization to apply. See "Reflex.Native.Widget.Customization".
   -> Text
   -- ^The text to display.
-  -> m (TextView (ViewBuilderSpace m) (ViewBuilderLayout m) t)
+  -> m (TextView t (ViewBuilderSpace m) layout)
 textWith customization t = case customization of
   Customization_Immediate f -> buildTextView (f $ def { _textConfig_initialText = t })
   Customization_PostBuild f -> do
@@ -121,8 +119,8 @@ textWith customization t = case customization of
 
 -- |Build a static text view with the given text and the default text configuration customized using the given function.
 textWith_
-  :: (NotReady t m, PostBuild t m, ViewBuilder t m)
-  => Customization t (TextConfig (ViewBuilderLayout m) t)
+  :: (NotReady t m, PostBuild t m, ViewBuilder t layout m)
+  => Customization t (TextConfig t layout)
   -- ^The customization to apply. See "Reflex.Native.Widget.Customization".
   -> Text
   -- ^The text to display.
@@ -131,15 +129,15 @@ textWith_ f t = void $ textWith f t
 
 -- |Build a plain dynamic text view with the given dynamically updating text and the default text configuration.
 dynText
-  :: (NotReady t m, PostBuild t m, ViewBuilder t m)
+  :: (NotReady t m, PostBuild t m, ViewBuilder t layout m)
   => Dynamic t Text
   -- ^The text to display over time.
-  -> m (TextView (ViewBuilderSpace m) (ViewBuilderLayout m) t)
+  -> m (TextView t (ViewBuilderSpace m) layout)
 dynText = dynTextWith mempty
 
 -- |Build a plain dynamic text view with the given dynamically updating text and the default text configuration.
 dynText_
-  :: (NotReady t m, PostBuild t m, ViewBuilder t m)
+  :: (NotReady t m, PostBuild t m, ViewBuilder t layout m)
   => Dynamic t Text
   -- ^The text to display over time.
   -> m ()
@@ -147,12 +145,12 @@ dynText_ = void . dynText
 
 -- |Build a dynamic text view with the given dynamically updating text and the default text configuration customized using the given function.
 dynTextWith
-  :: (NotReady t m, PostBuild t m, ViewBuilder t m)
-  => Customization t (TextConfig (ViewBuilderLayout m) t)
+  :: (NotReady t m, PostBuild t m, ViewBuilder t layout m)
+  => Customization t (TextConfig t layout)
   -- ^The customization to apply. See "Reflex.Native.Widget.Customization".
   -> Dynamic t Text
   -- ^The text to display over time.
-  -> m (TextView (ViewBuilderSpace m) (ViewBuilderLayout m) t)
+  -> m (TextView t (ViewBuilderSpace m) layout)
 dynTextWith customization dt = do
   pb <- getPostBuild
   let f = case customization of
@@ -163,8 +161,8 @@ dynTextWith customization dt = do
 
 -- |Build a dynamic text view with the given dynamically updating text and the default text configuration customized using the given function.
 dynTextWith_
-  :: (NotReady t m, PostBuild t m, ViewBuilder t m)
-  => Customization t (TextConfig (ViewBuilderLayout m) t)
+  :: (NotReady t m, PostBuild t m, ViewBuilder t layout m)
+  => Customization t (TextConfig t layout)
   -- ^The customization to apply. See "Reflex.Native.Widget.Customization".
   -> Dynamic t Text
   -- ^The text to display over time.

@@ -61,8 +61,8 @@ import Reflex.NotReady.Class as Export
 --     * 'PerformEvent', granting the ability to execute arbitrary monadic actions in response to @Event@s firing, along with the guarantee that whatever monad
 --     is used is @MonadIO@ and @MonadRef@.
 --     * @Monad@, @Applicative@, and @Functor@, implied by many of the previous.
-type MonadNativeConstraints t m =
-  ( ViewBuilder t m
+type MonadNativeConstraints t layout m =
+  ( ViewBuilder t layout m
   , Reflex t
   , MonadFix m
   , MonadHold t m
@@ -78,7 +78,7 @@ type MonadNativeConstraints t m =
   )
 
 -- |Class which implies all constraints of 'MonadNativeConstraints' but doesn't require additional language extensions at the use site.
-class MonadNativeConstraints t m => MonadNative t m | m -> t
+class MonadNativeConstraints t layout m => MonadNative t layout m | m -> t, m -> layout
 -- |Trivial instance for all types @t@, @m@
-instance MonadNativeConstraints t m => MonadNative t m
+instance MonadNativeConstraints t layout m => MonadNative t layout m
 

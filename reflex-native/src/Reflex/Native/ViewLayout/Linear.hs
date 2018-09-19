@@ -19,14 +19,14 @@ data LinearLayout (axis :: Axis)
 type ColumnLayout = LinearLayout 'Vertical
 type RowLayout = LinearLayout 'Horizontal
 
-instance ViewLayout (LinearLayout axis) t where
-  data ContainerLayout (LinearLayout axis) t = ContainerLayout_Linear
+instance ViewLayout t (LinearLayout axis) where
+  data ContainerLayout t (LinearLayout axis) = ContainerLayout_Linear
     { _containerLayout_linear_spacingBetween :: !Double
     }
-  data ContentLayout (LinearLayout axis) t = ContentLayout_Linear
+  data ContentLayout t (LinearLayout axis) = ContentLayout_Linear
 
-instance Default (ContainerLayout (LinearLayout axis) t) where
+instance Default (ContainerLayout t (LinearLayout axis)) where
   def = ContainerLayout_Linear 8
-instance Default (ContentLayout (LinearLayout axis) t) where
+instance Default (ContentLayout t (LinearLayout axis)) where
   def = ContentLayout_Linear
 

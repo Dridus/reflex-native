@@ -14,15 +14,15 @@ import Reflex.Native.ViewLayout.Class (ViewLayout(type ContainerLayout, type Con
 
 data ExplicitLayout
 
-instance ViewLayout ExplicitLayout t where
-  data ContainerLayout ExplicitLayout t = ContainerLayout_Explicit
-  data ContentLayout ExplicitLayout t = ContentLayout_Explicit
+instance ViewLayout t ExplicitLayout where
+  data ContainerLayout t ExplicitLayout = ContainerLayout_Explicit
+  data ContentLayout t ExplicitLayout = ContentLayout_Explicit
     { _contentLayout_explicit_initialRect :: Rect
     , _contentLayout_explicit_setRect :: Maybe (Event t Rect)
     }
 
-instance Default (ContainerLayout ExplicitLayout t) where
+instance Default (ContainerLayout t ExplicitLayout) where
   def = ContainerLayout_Explicit
-instance Default (ContentLayout ExplicitLayout t) where
+instance Default (ContentLayout t ExplicitLayout) where
   def = ContentLayout_Explicit (Rect zeroV zeroV) Nothing
 

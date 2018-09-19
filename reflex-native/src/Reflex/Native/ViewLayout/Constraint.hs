@@ -37,11 +37,11 @@ data ViewProperty (axis :: Axis) where
   ViewProperty_Center :: ViewProperty axis
   ViewProperty_Length :: ViewProperty axis
 
-data ViewVariable axis space t where
-  ViewVariable_ViewProperty :: forall axis space t. View space ConstraintLayout t -> ViewProperty axis -> ViewVariable axis space t
-  ViewVariable_Dynamic :: forall axis space t. Dynamic t Double -> ViewVariable axis space t
+data ViewVariable t space axis where
+  ViewVariable_ViewProperty :: forall t space axis. View t space ConstraintLayout -> ViewProperty axis -> ViewVariable t space axis
+  ViewVariable_Dynamic :: forall t space axis. Dynamic t Double -> ViewVariable t space axis
 
-instance Show (View space ConstraintLayout t) => Show (ViewVariable axis space t) where
+instance Show (View t space ConstraintLayout) => Show (ViewVariable t space axis) where
   showsPrec _ = \ case
     ViewVariable_ViewProperty v p ->
       let propStr = case p of
@@ -56,62 +56,62 @@ instance Show (View space ConstraintLayout t) => Show (ViewVariable axis space t
       in showString propStr . shows v
     ViewVariable_Dynamic _ -> showString "<dynamic>"
 
-data ViewConstraint space t
-  = ViewConstraint_Horizontal (Constraint (ViewVariable 'Horizontal space t))
-  | ViewConstraint_Vertical (Constraint (ViewVariable 'Vertical space t))
+data ViewConstraint t space
+  = ViewConstraint_Horizontal (Constraint (ViewVariable t space 'Horizontal))
+  | ViewConstraint_Vertical (Constraint (ViewVariable t space 'Vertical))
 
-instance Show (View space ConstraintLayout t) => Show (ViewConstraint space t) where
+instance Show (View t space ConstraintLayout) => Show (ViewConstraint t space) where
   showsPrec _ = \ case
     ViewConstraint_Horizontal c -> showString "H: " . shows c
     ViewConstraint_Vertical c -> showString "V: " . shows c
 
-dynT :: Dynamic t Double -> ViewVariable axis space t
+dynT :: Dynamic t Double -> ViewVariable t space axis
 dynT = ViewVariable_Dynamic
 
-leftOf :: View space ConstraintLayout t -> ViewVariable 'Horizontal space t
+leftOf :: View t space ConstraintLayout -> ViewVariable t space 'Horizontal
 leftOf = flip ViewVariable_ViewProperty ViewProperty_Left
 
-leadingOf :: View space ConstraintLayout t -> ViewVariable 'Horizontal space t
+leadingOf :: View t space ConstraintLayout -> ViewVariable t space 'Horizontal
 leadingOf = flip ViewVariable_ViewProperty ViewProperty_Leading
 
-rightOf :: View space ConstraintLayout t -> ViewVariable 'Horizontal space t
+rightOf :: View t space ConstraintLayout -> ViewVariable t space 'Horizontal
 rightOf = flip ViewVariable_ViewProperty ViewProperty_Right
 
-trailingOf :: View space ConstraintLayout t -> ViewVariable 'Horizontal space t
+trailingOf :: View t space ConstraintLayout -> ViewVariable t space 'Horizontal
 trailingOf = flip ViewVariable_ViewProperty ViewProperty_Trailing
 
-topOf :: View space ConstraintLayout t -> ViewVariable 'Vertical space t
+topOf :: View t space ConstraintLayout -> ViewVariable t space 'Vertical
 topOf = flip ViewVariable_ViewProperty ViewProperty_Top
 
-bottomOf :: View space ConstraintLayout t -> ViewVariable 'Vertical space t
+bottomOf :: View t space ConstraintLayout -> ViewVariable t space 'Vertical
 bottomOf = flip ViewVariable_ViewProperty ViewProperty_Bottom
 
-centerOf :: View space ConstraintLayout t -> ViewVariable axis space t
+centerOf :: View t space ConstraintLayout -> ViewVariable t space axis
 centerOf = flip ViewVariable_ViewProperty ViewProperty_Center
 
-lengthOf :: View space ConstraintLayout t -> ViewVariable axis space t
+lengthOf :: View t space ConstraintLayout -> ViewVariable t space axis
 lengthOf = flip ViewVariable_ViewProperty ViewProperty_Length
 
 data ConstraintLayout
 
-instance ViewLayout ConstraintLayout t where
-  data ContainerLayout ConstraintLayout t = ContainerLayout_Constraint
-  data ContentLayout ConstraintLayout t = ContentLayout_Constraint
+instance ViewLayout t ConstraintLayout where
+  data ContainerLayout t ConstraintLayout = ContainerLayout_Constraint
+  data ContentLayout t ConstraintLayout = ContentLayout_Constraint
 
-instance Default (ContainerLayout ConstraintLayout t) where
+instance Default (ContainerLayout t ConstraintLayout) where
   def = ContainerLayout_Constraint
-instance Default (ContentLayout ConstraintLayout t) where
+instance Default (ContentLayout t ConstraintLayout) where
   def = ContentLayout_Constraint
 
-class (Eq (ViewConstraintId m), Ord (ViewConstraintId m), ViewSpace space) => ConstraintLayoutBuilder space t m | m -> space, m -> t where
+class (Eq (ViewConstraintId m), Ord (ViewConstraintId m), ViewSpace space) => ConstraintLayoutBuilder t space m | m -> space, m -> t where
   data ViewConstraintId m :: *
 
-  addConstraint :: ViewConstraint space t -> m (ViewConstraintId m)
-  incrementalConstraints :: Ord k => Incremental t (PatchMap k (ViewConstraint space t)) -> m ()
+  addConstraint :: ViewConstraint t space -> m (ViewConstraintId m)
+  incrementalConstraints :: Ord k => Incremental t (PatchMap k (ViewConstraint t space)) -> m ()
   removeConstraint :: ViewConstraintId m -> m ()
 
-  horizontalConstraint :: Constraint (ViewVariable 'Horizontal space t) -> m (ViewConstraintId m)
+  horizontalConstraint :: Constraint (ViewVariable t space 'Horizontal) -> m (ViewConstraintId m)
   horizontalConstraint = addConstraint . ViewConstraint_Horizontal
 
-  verticalConstraint :: Constraint (ViewVariable 'Vertical space t) -> m (ViewConstraintId m)
+  verticalConstraint :: Constraint (ViewVariable t space 'Vertical) -> m (ViewConstraintId m)
   verticalConstraint = addConstraint . ViewConstraint_Vertical
