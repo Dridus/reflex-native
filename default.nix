@@ -2,11 +2,11 @@ rec {
   # Functions which extend a haskellPackages with the packages local to this repository using haskellPackages.callPackage. Used later to make augmented
   # platform-specific package sets, but also useful for integrating Reflex Native into your Nix build environment.
   packages = haskellPackages: {
-    kiwi-dsl = haskellPackages.callPackage ./kiwi/dsl {};
-    kiwi-cpp = haskellPackages.callPackage ./kiwi/cpp {};
+    kiwi-dsl = haskellPackages.callCabal2nix "kiwi-dsl" ./kiwi/dsl {};
+    kiwi-cpp = haskellPackages.callCabal2nix "kiwi-cpp" ./kiwi/binding/cpp {};
     hs-uikit = haskellPackages.callPackage ./hs-uikit {};
     reflex-native = haskellPackages.callCabal2nix "reflex-native" ./reflex-native {};
-    reflex-native-draggy = haskellPackages.callPackage ./examples/draggy {};
+    reflex-native-draggy = haskellPackages.callCabal2nix "reflex-native-draggy" ./examples/draggy {};
     reflex-native-test = haskellPackages.callCabal2nix "reflex-native-test" ./reflex-native-test {};
     reflex-native-uikit = haskellPackages.callCabal2nix "reflex-native-uikit" ./reflex-native-uikit {};
   };
@@ -27,7 +27,9 @@ rec {
   # haskellPackages.callPackage. Used later to make augmented platform-specific package sets, but also useful for integrating Reflex Native into your Nix
   # build environment.
   overrides = {
-    common = self: super: {};
+    common = self: super: {
+      generic-lens = nixpkgs.haskell.lib.dontCheck super.generic-lens;
+    };
 
     host = nixpkgs.lib.composeExtensions overrides.common (self: super: packages self);
 
