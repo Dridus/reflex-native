@@ -33,8 +33,9 @@ import qualified Data.Sequence as Seq
 import Data.Traversable (for)
 import Reflex.Class (MonadHold, MonadSample)
 import Reflex.Host.Class (MonadReadEvent(readEvent), newEventWithTriggerRef, subscribeEvent)
-import Reflex.Native.Test.Types (TestEnv(..), TestEvaluation(..), TestHolder, TestView, traverseTestView)
+import Reflex.Native.Test.Types (TestEnv(..), TestEvaluation(..), TestHolder, TestView, newTestLayoutHolderFill, traverseTestView)
 import Reflex.Native.Test.ViewBuilder (BuildFrame(..), Env(..), TestViewBuilderT, runTestViewBuilderT)
+import Reflex.Native.ViewLayout.Fill (FillLayout)
 import Reflex.PerformEvent.Base (FireCommand(..), PerformEventT, hostPerformEventT)
 import Reflex.PostBuild.Base (PostBuildT, runPostBuildT)
 import Reflex.Spider.Internal (HasSpiderTimeline, SpiderHost, SpiderTimeline, SpiderTimelineEnv, runSpiderHostForTimeline, withSpiderTimeline)
@@ -42,10 +43,14 @@ import Reflex.TriggerEvent.Base (EventTriggerRef(..), TriggerInvocation(..))
 
 
 -- |The type conforming to 'Reflex.Native.MonadNativeConstraints' that test widgets run as.
-type TestWidget x = PostBuildT (SpiderTimeline x) (TestViewBuilderT (SpiderTimeline x) (PerformEventT (SpiderTimeline x) (SpiderHost x)))
+type TestWidget x layout =
+  PostBuildT (SpiderTimeline x)
+    (TestViewBuilderT (SpiderTimeline x) layout
+      (PerformEventT (SpiderTimeline x)
+        (SpiderHost x)))
 
 -- |Helper function used by 'testWith' and 'processEventsAndRead' to read out the current state of the view hierarchy.
-snapshotViewHierarchy :: MonadIO m => TestHolder t -> m (Seq (TestView t Identity))
+snapshotViewHierarchy :: MonadIO m => TestHolder t layout -> m (Seq (TestView t layout Identity))
 snapshotViewHierarchy rootHolder =
   liftIO $ traverse (traverseTestView (\ f -> fmap Identity . f <=< readTVarIO)) =<< readTVarIO rootHolder
 
@@ -62,13 +67,14 @@ withTestHost action =
 -- |Test a widget by running its first build and then performing a series of evaluation steps. Usually wrapped by 'withTestHost'.
 testWith
   :: HasSpiderTimeline x
-  => TestWidget x a
+  => TestWidget x FillLayout a
   -- ^The build to run.
-  -> (a -> TestEvaluation x b)
+  -> (a -> TestEvaluation x FillLayout b)
   -- ^The evaluation program to execute after the build is complete.
   -> SpiderHost x b
 testWith widget evaluation = do
   _testEnv_rootHolder <- liftIO $ newTVarIO Seq.empty
+  _testEnv_rootLayout <- liftIO newTestLayoutHolderFill
   _testEnv_rootReady <- liftIO $ newTVarIO False
   _testEnv_eventChan <- liftIO newChan
   (stepCompleteEvent, _testEnv_stepCompleteTriggerRef) <- newEventWithTriggerRef
@@ -77,7 +83,7 @@ testWith widget evaluation = do
   _testEnv_stepCompleteEventHandle <- subscribeEvent stepCompleteEvent
 
   ((a, env), _testEnv_fireCommand) <- hostPerformEventT $ do
-    runTestViewBuilderT (runPostBuildT widget postBuildEvent) _testEnv_rootHolder (atomically $ writeTVar _testEnv_rootReady True) _testEnv_eventChan
+    runTestViewBuilderT (runPostBuildT widget postBuildEvent) _testEnv_rootHolder _testEnv_rootLayout (atomically $ writeTVar _testEnv_rootReady True) _testEnv_eventChan
   unreadyChildren <- liftIO . readTVarIO . _buildFrame_unreadyChildren . _env_frame $ env
   when (unreadyChildren == 0) $
     liftIO . atomically . writeTVar _testEnv_rootReady $ True
@@ -92,9 +98,9 @@ testWith widget evaluation = do
 --
 -- __Note on read actions:__ The read action may be performed many times, for two reasons.
 --
--- 1. Internally, 'PerformEventT' runs one or more event propagation passes and the precise
--- number depends on how many times an event propagation triggers a performed event action; each time an event triggers a perform event, event propagation
--- occurs again after action is performed, until no more perform event requests are made.
+-- 1. Internally, 'PerformEventT' runs one or more event propagation passes and the precise number depends on how many times an event propagation triggers a
+-- performed event action; each time an event triggers a perform event, event propagation occurs again after action is performed, until no more perform event
+-- requests are made.
 --
 -- Because each of these event propagations happen in a frame, if you read out an @Event@ using 'MonadReadEvent', then unless your @Event@ fires on each of the
 -- propagations it will be firing in only one of the returned results, so be careful to consider this when reading @Event@s.
@@ -105,7 +111,7 @@ processEventsAndRead
   :: forall x a. HasSpiderTimeline x
   => (forall m. (MonadReadEvent (SpiderTimeline x) m, MonadHold (SpiderTimeline x) m, MonadSample (SpiderTimeline x) m) => m a)
   -- ^Action to execute during the read phase allowing readout of @Event@s, @Behavior@s, and @Dynamic@s.
-  -> TestEvaluation x (NonEmpty a)
+  -> TestEvaluation x FillLayout (NonEmpty a)
 processEventsAndRead readAction = do
   TestEnv {..} <- TestEvaluation ask
 
@@ -134,5 +140,5 @@ processEventsAndRead readAction = do
 
 -- |Process any pending event triggers until no more are pending. A simpler version of 'processEventsAndRead' when you don't need to inspect the state of the
 -- FRP network after each propagation.
-processEvents :: forall x. HasSpiderTimeline x => TestEvaluation x ()
+processEvents :: forall x. HasSpiderTimeline x => TestEvaluation x FillLayout ()
 processEvents = void $ processEventsAndRead (pure ())

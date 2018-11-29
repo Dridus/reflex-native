@@ -53,7 +53,6 @@ import Data.Functor.Const (Const(..))
 import Data.Functor.Identity (Identity(..))
 import Data.Functor.Product (Product(Pair))
 import Data.Generics.Product (field)
-import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IORef (IORef)
 import Data.Key (forWithKey_)
@@ -81,7 +80,7 @@ import Reflex.Native.ContainerConfig (ContainerConfig(..))
 import Reflex.Native.Geometry (KnownAxis)
 import Reflex.Native.Gesture (GestureData, GestureSpec(..), GestureState)
 import Reflex.Native.Test.Types
-  ( TestHolder, TestViewSpace, TestViewSpaceLayout(makeTestContainerViewLayout)
+  ( TestHolder, TestLayoutHolder(..), TestViewSpace, TestViewSpaceLayout(makeTestContainerViewLayout)
   , TestView(..), TestViewCommon(..), TestViewLayout(..), TestTextView(..), TestContainerViewLayout(..), TestContainerView(..)
   , TestMarker(..), newTestIdentity, testView_common, tshowTestMarkerIdentity
   )
@@ -93,7 +92,7 @@ import Reflex.Native.ViewBuilder.Class
 import Reflex.Native.ViewConfig (RawViewConfig(..), ViewConfig(..))
 import Reflex.Native.ViewLayout.Class (ViewLayout(type ContentLayout))
 import Reflex.Native.ViewLayout.Constraint
-  ( ConstraintLayout, ConstraintLayoutBuilder(type ViewConstraintId, addConstraint, incrementalConstraints, removeConstraint), ViewConstraint
+  ( ConstraintLayout, ConstraintLayoutBuilder(type ViewConstraintId, addConstraint, incrementalConstraints, removeConstraint)
   )
 import Reflex.Native.ViewLayout.Explicit (ExplicitLayout, ContentLayout(..))
 import Reflex.Native.ViewLayout.Fill (FillLayout)
@@ -127,19 +126,11 @@ data BuildFrame = BuildFrame
 data Env t layout = Env
   { _env_views :: TestHolder t layout
   -- ^The current holder to append views to
-  , _env_layout :: EnvLayout t layout
+  , _env_layout :: TestLayoutHolder t layout
   , _env_frame :: BuildFrame
   -- ^The current dynamic ('Adjustable') frame that the builder is running in
   }
 
-data EnvLayout t layout where
-  EnvLayout_Constraint ::
-    { _envLayout_constraint_constraints :: TVar (IntMap (ViewConstraint t TestViewSpace))
-    , _envLayout_constraint_nextConstraintId :: TVar Int
-    } -> EnvLayout t ConstraintLayout
-  EnvLayout_Explicit :: EnvLayout t ExplicitLayout
-  EnvLayout_Fill :: EnvLayout t FillLayout
-  EnvLayout_Linear :: EnvLayout t (LinearLayout axis)
 
 -- |Constraints required of a monad to support a 'TestViewBuilderT'.
 type SupportsTestViewBuilder t m =
@@ -294,24 +285,24 @@ instance SupportsTestViewBuilder t m => ConstraintLayoutBuilder t TestViewSpace 
   newtype ViewConstraintId (TestViewBuilderT t ConstraintLayout m) = ViewConstraintId_Test IntMap.Key deriving (Eq, Ord)
 
   addConstraint c = do
-    EnvLayout_Constraint {..} <- TestViewBuilderT $ asks _env_layout
+    TestLayoutHolder_Constraint {..} <- TestViewBuilderT $ asks _env_layout
     i <- liftIO . atomically $ do
-      i <- readTVar _envLayout_constraint_nextConstraintId
-      modifyTVar' _envLayout_constraint_nextConstraintId succ
-      modifyTVar' _envLayout_constraint_constraints $ IntMap.insert i c
+      i <- readTVar _testLayoutHolder_constraint_nextConstraintId
+      modifyTVar' _testLayoutHolder_constraint_nextConstraintId succ
+      modifyTVar' _testLayoutHolder_constraint_constraints $ IntMap.insert i c
       pure i
     pure $ ViewConstraintId_Test i
 
   incrementalConstraints incr = do
-    EnvLayout_Constraint {..} <- TestViewBuilderT $ asks _env_layout
+    TestLayoutHolder_Constraint {..} <- TestViewBuilderT $ asks _env_layout
     cs0 <- sample $ currentIncremental incr
 
     keyMap0 <- liftIO . atomically $ do
-      i0 <- readTVar _envLayout_constraint_nextConstraintId
-      modifyTVar' _envLayout_constraint_nextConstraintId $ (+ Map.size cs0)
+      i0 <- readTVar _testLayoutHolder_constraint_nextConstraintId
+      modifyTVar' _testLayoutHolder_constraint_nextConstraintId $ (+ Map.size cs0)
       let keyMap0 = Map.fromAscList $ zip (Map.keys cs0) [i0..]
           csMap0 = IntMap.fromAscList $ zip [i0..] (Map.elems cs0)
-      modifyTVar' _envLayout_constraint_constraints $ IntMap.union csMap0
+      modifyTVar' _testLayoutHolder_constraint_constraints $ IntMap.union csMap0
       pure keyMap0
     keyMapTv <- liftIO $ newTVarIO keyMap0
 
@@ -322,20 +313,20 @@ instance SupportsTestViewBuilder t m => ConstraintLayoutBuilder t TestViewSpace 
           Nothing -> do
             for_ (Map.lookup k keyMap) $ \ i -> do
               modifyTVar' keyMapTv $ Map.delete k
-              modifyTVar' _envLayout_constraint_constraints $ IntMap.delete i
+              modifyTVar' _testLayoutHolder_constraint_constraints $ IntMap.delete i
 
           Just c' -> do
             case Map.lookup k keyMap of
               Just i -> do
-                modifyTVar' _envLayout_constraint_constraints $ IntMap.insert i c'
+                modifyTVar' _testLayoutHolder_constraint_constraints $ IntMap.insert i c'
               Nothing -> do
-                i <- readTVar _envLayout_constraint_nextConstraintId
-                modifyTVar' _envLayout_constraint_nextConstraintId succ
-                modifyTVar' _envLayout_constraint_constraints $ IntMap.insert i c'
+                i <- readTVar _testLayoutHolder_constraint_nextConstraintId
+                modifyTVar' _testLayoutHolder_constraint_nextConstraintId succ
+                modifyTVar' _testLayoutHolder_constraint_constraints $ IntMap.insert i c'
 
   removeConstraint (ViewConstraintId_Test i) = do
-    EnvLayout_Constraint {..} <- TestViewBuilderT $ asks _env_layout
-    liftIO . atomically . modifyTVar' _envLayout_constraint_constraints $ IntMap.delete i
+    TestLayoutHolder_Constraint {..} <- TestViewBuilderT $ asks _env_layout
+    liftIO . atomically . modifyTVar' _testLayoutHolder_constraint_constraints $ IntMap.delete i
     pure ()
 
 instance SupportsTestViewBuilder t m => ViewBuilder t ExplicitLayout (TestViewBuilderT t ExplicitLayout m) where
@@ -414,15 +405,15 @@ buildContainerViewImpl makeTestViewLayout =
     _testContainerView_contents <- liftIO $ newTVarIO Seq.empty
 
     _env_layout <- case _testContainerView_layout of
-      TestContainerViewLayout_Constraint _envLayout_constraint_constraints -> do
-        _envLayout_constraint_nextConstraintId <- liftIO $ newTVarIO 0
-        pure $ EnvLayout_Constraint {..}
+      TestContainerViewLayout_Constraint _testLayoutHolder_constraint_constraints -> do
+        _testLayoutHolder_constraint_nextConstraintId <- liftIO $ newTVarIO 0
+        pure $ TestLayoutHolder_Constraint {..}
       TestContainerViewLayout_Explicit ->
-        pure EnvLayout_Explicit
+        pure TestLayoutHolder_Explicit
       TestContainerViewLayout_Fill ->
-        pure EnvLayout_Fill
+        pure TestLayoutHolder_Fill
       TestContainerViewLayout_Linear _ _ ->
-        pure $ EnvLayout_Linear
+        pure $ TestLayoutHolder_Linear
 
     parentEnv <- TestViewBuilderT ask
     let childEnv = parentEnv { _env_views = _testContainerView_contents, _env_layout }
@@ -499,15 +490,23 @@ becameReadyIn (BuildFrame {..}) = do
 
 -- |"Reflex.Native.AdjustingBuilder" configured for testing.
 instance SupportsTestViewBuilder t m => Adjustable t (TestViewBuilderT t layout m) where
-  runWithReplace = AdjustingBuilder.runWithReplaceImpl testViewBuilderConfig
-  traverseIntMapWithKeyWithAdjust = AdjustingBuilder.traverseIntMapWithKeyWithAdjustImpl testViewBuilderConfig
-  traverseDMapWithKeyWithAdjust = AdjustingBuilder.traverseDMapWithKeyWithAdjustImpl testViewBuilderConfig
-  traverseDMapWithKeyWithAdjustWithMove = AdjustingBuilder.traverseDMapWithKeyWithAdjustWithMoveImpl testViewBuilderConfig
+  runWithReplace b0 b' = do
+    Env { _env_layout } <- TestViewBuilderT ask
+    AdjustingBuilder.runWithReplaceImpl (testViewBuilderConfig _env_layout) b0 b'
+  traverseIntMapWithKeyWithAdjust f m0 m' = do
+    Env { _env_layout } <- TestViewBuilderT ask
+    AdjustingBuilder.traverseIntMapWithKeyWithAdjustImpl (testViewBuilderConfig _env_layout) f m0 m'
+  traverseDMapWithKeyWithAdjust f dm0 dm' = do
+    Env { _env_layout } <- TestViewBuilderT ask
+    AdjustingBuilder.traverseDMapWithKeyWithAdjustImpl (testViewBuilderConfig _env_layout) f dm0 dm'
+  traverseDMapWithKeyWithAdjustWithMove f dm0 dm' = do
+    Env { _env_layout } <- TestViewBuilderT ask
+    AdjustingBuilder.traverseDMapWithKeyWithAdjustWithMoveImpl (testViewBuilderConfig _env_layout) f dm0 dm'
 
 -- |'AdjustingBuilderConfig' for manipulating the test view hierarchy.
 testViewBuilderConfig
-  :: MonadIO m
-  => EnvLayout t layout
+  :: forall t layout m. MonadIO m
+  => TestLayoutHolder t layout
   -> AdjustingBuilderConfig (TestViewBuilderT t layout m) (TestRequesterT t m) IO (TestMarker t layout) (TestHolder t layout) ()
 testViewBuilderConfig _env_layout = AdjustingBuilderConfig {..}
   where
@@ -521,6 +520,7 @@ testViewBuilderConfig _env_layout = AdjustingBuilderConfig {..}
       _testMarker_parent <- newTVarIO Nothing
       TestMarker <$> newTestIdentity <*> newTVarIO Nothing
 
+    _adjustingBuilderConfig_runChild :: forall a. TestHolder t layout -> () -> IO () -> TestViewBuilderT t layout m a -> TestRequesterT t m (a, Bool)
     _adjustingBuilderConfig_runChild _env_views () _buildFrame_commitAction child = do
       _buildFrame_unreadyChildren <- liftIO $ newTVarIO 0
       _buildFrame_hasCommitted <- liftIO $ newTVarIO False
@@ -638,12 +638,14 @@ runTestViewBuilderT
   -- ^The 'TestViewBuilderT' action to run.
   -> TestHolder t layout
   -- ^Where the builder should add new views, typically an empty holder.
+  -> TestLayoutHolder t layout
+  -- ^Layout context to build into.
   -> IO ()
   -- ^The root frame commit action.
   -> Chan [DSum (EventTriggerRef t) TriggerInvocation]
   -- ^A channel where asynchronous event triggers will be enqueued by the builder. Usually processed synchronously in the test running code.
   -> m (a, Env t layout)
-runTestViewBuilderT (TestViewBuilderT ma) _env_views _buildFrame_commitAction eventChan = do
+runTestViewBuilderT (TestViewBuilderT ma) _env_views _env_layout _buildFrame_commitAction eventChan = do
   _buildFrame_unreadyChildren <- liftIO $ newTVarIO 0
   _buildFrame_hasCommitted <- liftIO $ newTVarIO False
   let _env_frame = BuildFrame {..}

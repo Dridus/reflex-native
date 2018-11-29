@@ -6,6 +6,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -21,6 +22,7 @@ module Reflex.Native.Test.Types
     TestIdentity, unTestIdentity, newTestIdentity, tshowTestIdentity
   -- * Test views
   , TestViewSpace, TestViewSpaceLayout(..), TestHolder, TestViewCommon(..), TestViewLayout(..)
+  , TestLayoutHolder(..), newTestLayoutHolderConstraint, newTestLayoutHolderExplicit, newTestLayoutHolderFill, newTestLayoutHolderLinear
   , TestContainerViewLayout(..), TestContainerView(..), SomeTestContainerView(..)
   , TestTextView(..), SomeTestTextView(..)
   , TestMarker(..), SomeTestMarker(..)
@@ -48,6 +50,7 @@ import Data.Foldable (toList)
 import Data.Functor.Identity (Identity(..))
 import Data.Generics.Product (field)
 import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.IORef (IORef, newIORef, atomicModifyIORef')
 import Data.Monoid ((<>))
 import Data.Proxy (Proxy(..))
@@ -56,6 +59,7 @@ import Data.Text (Text, pack)
 import GHC.Generics (Generic)
 import qualified Rank2
 import Rank2 (apply)
+import Reflex.Class (ffor)
 import Reflex.Host.Class (ReflexHost(type EventHandle, type EventTrigger))
 import Reflex.Native.Geometry (Axis(Horizontal, Vertical), KnownAxis(axisVal), Rect)
 import Reflex.Native.TextStyle (TextStyle(..))
@@ -459,9 +463,11 @@ testView_common f = \ case
   other -> pure other
 
 -- |Traverse to the unique identity in a 'TestView'.
-testView_identity :: Lens' (TestView t layout v) TestIdentity
+testView_identity :: forall t layout v. Lens' (TestView t layout v) TestIdentity
 testView_identity f = \ case
-  TestView_Container cv -> TestView_Container <$> (field @"_testContainerView_common" . field @"_testViewCommon_identity") f cv
+  TestView_Container (cv@(TestContainerView { _testContainerView_common }) :: TestContainerView t layout layout' v) ->
+    ffor (field @"_testViewCommon_identity" f _testContainerView_common) $ \ common' ->
+      TestView_Container cv { _testContainerView_common = common' }
   TestView_Text tv -> TestView_Text <$> (field @"_testTextView_common" . field @"_testViewCommon_identity") f tv
   TestView_Marker (TestMarker i p) -> fmap (\ i' -> TestView_Marker $ TestMarker i' p) (f i)
 
@@ -484,10 +490,39 @@ withSomeTestViews (SomeTestViews vs) f = f vs
 -- |Type which holds a sequence of views. The same type as @_testContainerView_contents@ for @'TestContainerView' TVar@
 type TestHolder t layout = TVar (Seq (TestView t layout TVar))
 
+data TestLayoutHolder t layout where
+  TestLayoutHolder_Constraint ::
+    { _testLayoutHolder_constraint_constraints :: TVar (IntMap (ViewConstraint t TestViewSpace))
+    , _testLayoutHolder_constraint_nextConstraintId :: TVar Int
+    } -> TestLayoutHolder t ConstraintLayout
+  TestLayoutHolder_Explicit :: TestLayoutHolder t ExplicitLayout
+  TestLayoutHolder_Fill :: TestLayoutHolder t FillLayout
+  TestLayoutHolder_Linear :: TestLayoutHolder t (LinearLayout axis)
+
+newTestLayoutHolderConstraint :: IO (TestLayoutHolder t ConstraintLayout)
+newTestLayoutHolderConstraint =
+  TestLayoutHolder_Constraint
+    <$> newTVarIO IntMap.empty
+    <*> newTVarIO 0
+
+newTestLayoutHolderExplicit :: IO (TestLayoutHolder t ExplicitLayout)
+newTestLayoutHolderExplicit =
+  pure TestLayoutHolder_Explicit
+  
+newTestLayoutHolderFill :: IO (TestLayoutHolder t FillLayout)
+newTestLayoutHolderFill =
+  pure TestLayoutHolder_Fill
+  
+newTestLayoutHolderLinear :: IO (TestLayoutHolder t (LinearLayout axis))
+newTestLayoutHolderLinear =
+  pure TestLayoutHolder_Linear
+
 -- |The environment of an in-progress test with a handle to the view hierarchy and the event processing channel.
 data TestEnv x = TestEnv
   { _testEnv_rootHolder :: TestHolder (SpiderTimeline x) FillLayout
   -- ^The root of the view hierarchy.
+  , _testEnv_rootLayout :: TestLayoutHolder (SpiderTimeline x) FillLayout
+  -- ^The root layout context for the view hierarchy.
   , _testEnv_rootReady :: TVar Bool
   -- ^True iff the first build was immediately ready or it's been committed since.
   , _testEnv_eventChan :: Chan [DSum (EventTriggerRef (SpiderTimeline x)) TriggerInvocation]
@@ -502,5 +537,5 @@ data TestEnv x = TestEnv
   }
 
 -- |The monad for evaluating an in-progress test after the build has completed and has access to the state of the view hierarchy and event processing channel.
-newtype TestEvaluation x a = TestEvaluation { unTestEvaluation :: RWST (TestEnv x) () (SomeTestViews (SpiderTimeline x) Identity) (SpiderHost x) a }
+newtype TestEvaluation x layout a = TestEvaluation { unTestEvaluation :: RWST (TestEnv x) () (Seq (TestView (SpiderTimeline x) layout Identity)) (SpiderHost x) a }
   deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadException, MonadAsyncException)

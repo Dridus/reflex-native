@@ -6,5 +6,4 @@ import Reflex.Native.Test.Optics as Export
 import Reflex.Native.Test.Runner as Export
 import Reflex.Native.Test.Types as Export
   ( TestEvaluation, TestIdentity, tshowTestIdentity, TestViewCommon(..), TestContainerView(..), TestTextView(..), TestView(..)
-  , _testView_common, _testView_identity
   )
