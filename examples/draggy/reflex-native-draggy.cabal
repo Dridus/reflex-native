@@ -23,6 +23,7 @@ library
   ghc-prof-options: -fprof-auto
   build-depends:
       base
+    , data-default >= 0.5 && < 0.8
     , reflex
     , reflex-native
     , vector-space == 0.13.*

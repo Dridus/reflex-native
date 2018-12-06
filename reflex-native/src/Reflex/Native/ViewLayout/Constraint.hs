@@ -10,7 +10,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Reflex.Native.ViewLayout.Constraint
-  ( ViewProperty(..)
+  (
+    module Export
+  , ViewProperty(..)
   , ViewVariable(..), dynT, leftOf, leadingOf, rightOf, trailingOf, topOf, bottomOf, centerOf, lengthOf
   , ViewConstraint(..)
   , ConstraintLayout, ContainerLayout(ContainerLayout_Constraint), ContentLayout(ContentLayout_Constraint)
@@ -19,9 +21,10 @@ module Reflex.Native.ViewLayout.Constraint
 
 import Data.Default (Default(def))
 import Kiwi.Dsl (Constraint)
+import Kiwi.Dsl as Export
 import Reflex.Class (Dynamic, Incremental)
 import Reflex.Native.Geometry (Axis(Horizontal, Vertical))
-import Reflex.Native.ViewBuilder.Class (View, ViewSpace)
+import Reflex.Native.ViewBuilder.Class (View)
 import Reflex.Native.ViewLayout.Class (ViewLayout(type ContainerLayout, type ContentLayout))
 import Reflex.Patch.Map (PatchMap)
 
@@ -103,7 +106,7 @@ instance Default (ContainerLayout t ConstraintLayout) where
 instance Default (ContentLayout t ConstraintLayout) where
   def = ContentLayout_Constraint
 
-class (Eq (ViewConstraintId m), Ord (ViewConstraintId m), ViewSpace space) => ConstraintLayoutBuilder t space m | m -> space, m -> t where
+class (Eq (ViewConstraintId m), Ord (ViewConstraintId m)) => ConstraintLayoutBuilder t space m | m -> space, m -> t where
   data ViewConstraintId m :: *
 
   addConstraint :: ViewConstraint t space -> m (ViewConstraintId m)

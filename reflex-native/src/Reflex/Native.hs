@@ -35,6 +35,7 @@ import Reflex.Native.ViewLayout.Class as Export
 import Reflex.Native.ViewLayout.Constraint as Export
 import Reflex.Native.ViewLayout.Fill as Export
 import Reflex.Native.ViewLayout.Linear as Export
+import Reflex.Native.ViewLayout.Root as Export
 import Reflex.Native.ViewStyle as Export
 import Reflex.NotReady.Class as Export
 

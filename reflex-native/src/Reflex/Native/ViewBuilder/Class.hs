@@ -25,10 +25,13 @@ import Reflex.Class (Event, MonadHold, Reflex)
 import Reflex.DynamicWriter.Base (DynamicWriterT(..))
 import Reflex.EventWriter.Base (EventWriterT(..))
 import Reflex.Native.ContainerConfig (ContainerConfig)
+import Reflex.Native.Geometry (Axis(Horizontal, Vertical))
 import Reflex.Native.Gesture (GestureData, GestureSpec, GestureState)
 import Reflex.Native.TextConfig (TextConfig)
 import Reflex.Native.ViewConfig (RawViewConfig)
 import Reflex.Native.ViewLayout.Class (ViewLayout(type ContentLayout))
+import Reflex.Native.ViewLayout.Fill (FillLayout)
+import Reflex.Native.ViewLayout.Linear (LinearLayout)
 import Reflex.NotReady.Class (NotReady)
 import Reflex.Patch (Additive, Group)
 import Reflex.PerformEvent.Class (PerformEvent)
@@ -43,7 +46,11 @@ import Reflex.Requester.Base (RequesterT(..))
 --
 -- Each view space has raw types of the various cross-platform notions such as container views and text views, along with a raw arbitrary view type to which
 -- the other types can be converted.
-class ViewSpace space where
+class
+    ( ViewSpaceSupportsLayout t space FillLayout
+    , ViewSpaceSupportsLayout t space (LinearLayout 'Horizontal)
+    , ViewSpaceSupportsLayout t space (LinearLayout 'Vertical)
+    ) => ViewSpace t space where
   type ViewSpaceSupportsLayout t space :: * -> Constraint
 
   -- |The type of container views in the underlying view system, e.g. @UIView@ on UIKit or @ViewGroup@ on Android.
@@ -86,7 +93,7 @@ class
   ( Monad m
   , Reflex t
   , Adjustable t m, NotReady t m
-  , ViewSpace (ViewBuilderSpace m)
+  , ViewSpace t (ViewBuilderSpace m)
   , ViewSpaceSupportsLayout t (ViewBuilderSpace m) layout
   , ViewLayout t layout
   ) => ViewBuilder t layout m | m -> t, m -> layout where

@@ -83,7 +83,7 @@ import System.IO.Unsafe (unsafePerformIO)
 data TestViewSpace
 
 -- |Instance for testing.
-instance ViewSpace TestViewSpace where
+instance ViewSpace t TestViewSpace where
   type ViewSpaceSupportsLayout t TestViewSpace = TestViewSpaceLayout t
 
   type RawContainerView t TestViewSpace layout layout' = TestContainerView t layout layout' TVar
